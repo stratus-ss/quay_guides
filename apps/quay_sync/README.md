@@ -4,12 +4,13 @@
 
 The purpose of this program is to provide functionality for automation of day 2 activities that may otherwise be combersome to do with Quay out of the box. 
 
-*Current Features*
+**Current Features**
 
 1. Checks both the source and destination Quay instances to ensure that DNS can resolve and that they are listening on the expected port (443)
 2. Uses `podman` to login to both instances. The program currently assumes the credentials are the same on both sides as they are supposed to be mirrors of each other
 3. The program has 2 options:
-    *Option 1*: Use a config file to enumerate the specific repositories to be mirrored. There is a `sample_config.yaml` in this repo with examples. However the basic structure is as follows:
+    
+    **Option 1**: Use a config file to enumerate the specific repositories to be mirrored. There is a `sample_config.yaml` in this repo with examples. However the basic structure is as follows:
     ```
     source_server: <hostname>
     source_token: <pregenerated token>
@@ -20,7 +21,7 @@ The purpose of this program is to provide functionality for automation of day 2 
     - <organization/user>/<repo name>:<tag>
     ```
 
-    *Option 2*: Autodiscovery. This attempts to scan the source Quay instance and then create missing organizations and repositories on the destination server.
+    **Option 2**: Autodiscovery. This attempts to scan the source Quay instance and then create missing organizations and repositories on the destination server.
 
 4. Operations happen by shelling out to `podman`. While `skopeo` could be used, caching the images on the host running this script might be adventagious if there is mirroring happening between more than 2 hosts (for example a mirror and a backup mirror). The flow is a `podman pull`, `podman tag`, `podman push`.
 
@@ -46,6 +47,8 @@ EXAMPLES:
 ```
 ./quay_sync.py --username <quayadmin> --password <password> --config-file ./sample_config.yaml --skip-tls-verify --skip-broken-images
 ```
+
+## Python Classes
 
 ### PreflightChecker:
 
