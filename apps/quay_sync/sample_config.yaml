@@ -1,0 +1,10 @@
+source_server: central-quay.apps.ocp4.example.com
+source_token: TXUhhFwqkzJLryso6EZGpnnnDN40QRzeKGHBBFRz
+destination_server: central-quay.apps.quay-rep.example.com
+destination_token: GE2eX5GPndiSO8jbM0VU2nrDqt8u1J113nOOCKEd
+failover: false
+repositories:
+- org1/hello-podman:v2.0
+- org2/hello-podman:latest
+- org1/hello-podman1:v1.0
+- org3/hello-podman2:v2.0
