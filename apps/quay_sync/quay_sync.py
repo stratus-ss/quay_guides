@@ -36,6 +36,7 @@ class BaseOperations:
             Loads the configuration from the specified file.
         Args:
             config_file: The path to the configuration file.
+
         Returns:
             A dictionary containing the configuration data.
         """
@@ -48,6 +49,7 @@ class BaseOperations:
             exit(1)
         except yaml.YAMLError as e:
             logging.critical(f"--> Error parsing config file: {e}")
+
             exit(1)
         return data
 
@@ -58,6 +60,7 @@ class BaseOperations:
             Adds the `--tls-verify=false` flag to the specified command if `args.skip_tls_verify` is True.
         Args:
             command: The command to add the flag to.
+
         Returns:
             The updated command.
         """
