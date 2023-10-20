@@ -299,10 +299,7 @@ class QuayAPI:
         """
         working_url = f"{self.base_url}api/v1{href}/tag"
         tag_info = self.get_data(url=working_url)
-        tag_list = []
-        for tag in tag_info['tags']:
-            tag_list.append(tag['name'])
-        return tag_list
+        return [tag['name'] for tag in tag_info['tags']]
 
 if __name__ == "__main__":
     def add_key(dictionary, key, value):
