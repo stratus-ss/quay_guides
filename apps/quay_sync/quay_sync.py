@@ -19,67 +19,23 @@ parser.add_argument("--auto-discovery", action="store_true", help="Attempt to au
 
 args = parser.parse_args()
 
-class PreflightChecker:
-    def __init__(self):
-        pass
-
-    def check_dns(self, server: str) -> bool:
-        """Checks if the specified server can be resolved by DNS.
-
-        Args:
-            server: The server to check.
-
-        Returns:
-            True if the server can be resolved, False otherwise.
-        """
-
-        try:
-            ip_address = socket.gethostbyname(server)
-            logging.info("%s resolves to --> %s <--" % (server, ip_address))
-            return True
-        except socket.gaierror:
-            logging.critical("--> DNS lookup failed for host %s <----" % server)
-            exit(1)
-
-    def check_port(self, server: str) -> bool:
-        """Checks if the specified server is listening on the specified port.
-
-        Args:
-            server: The server to check.
-            port: The port to check.
-
-        Returns:
-            True if the server is listening on the specified port, False otherwise.
-        """
-
-        quay_port = 443
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect((server, quay_port))
-            logging.info(server + " is listening on port %s"% quay_port)
-            return True
-        except ConnectionRefusedError:
-            logging.critical("%s refused the connection on port %s" % quay_port)
-            exit(1)
-
-
-class ImageMover:
+class BaseOperations:
     def __init__(self, config_file):
-        self.config = self.load_config(config_file)
+        self.config = self.load_config(self, config_file=config_file)
         self.repositories = self.config["repositories"]
         self.source_server = self.config["source_server"]
         self.destination_server = self.config["destination_server"]
         self.failover = self.config["failover"]
         self.destination_token = self.config["destination_token"]
         self.source_token = self.config["source_token"]
-
-    def load_config(self, config_file: str) -> dict[str,str]:
+    
+    @staticmethod
+    def load_config(cls, config_file: str) -> dict[str,str]:
         """
-        Description: Loads the configuration from the specified file.
-
+        Description: 
+            Loads the configuration from the specified file.
         Args:
             config_file: The path to the configuration file.
-
         Returns:
             A dictionary containing the configuration data.
         """
@@ -88,76 +44,20 @@ class ImageMover:
             with open(config_file, 'r') as f:
                 data = yaml.load(f, Loader=yaml.FullLoader)
         except FileNotFoundError:
-            logging.critical("--> Config file not found: {}".format(config_file))
+            logging.critical(f"--> Config file not found: {config_file}")
             exit(1)
         except yaml.YAMLError as e:
-            logging.critical("--> Error parsing config file: {}".format(e))
+            logging.critical(f"--> Error parsing config file: {e}")
             exit(1)
         return data
-
-    def login_to_quay(self, server: str, username: str, password: str) -> None:
-        """
-        Description: Logs in to Quay on the specified server.
-
-        Args:
-            server: The server to log in to.
-            username: The Quay username.
-            password: The Quay password.
-        """
-
-        try:
-            podman_login_command = ["podman", "login", "-u=%s" % username, "-p=%s" % password, server]
-            podman_login_command = self.do_i_skip_tls(podman_login_command)
-            subprocess.check_output(podman_login_command)
-        except subprocess.CalledProcessError as e:
-            logging.critical("--> Error logging in to Quay:")
-            exit(1)
-        logging.info("Logged in to: %s" % server)
- 
-    @classmethod
-    def podman_operations(cls, operation, image_source=None, image_destination=None, image_and_tag=None):
-        """
-        Description: Performs a Podman operation on an image.
-
-        Args:
-            operation (str): The Podman operation to perform (e.g., "tag", "push", "pull").
-            image_source (str): The source image for the operation.
-            image_destination (str): The destination image for the operation.
-            image_and_tag (str): The image and tag to use for the operation.
-
-        Returns:
-            None
-        """
-        if operation == "tag":
-            podman_command = ["podman", operation, image_source, image_destination]
-            log_msg = "Image tagged: %s <---" % image_destination
-        elif operation == "push":
-            podman_command = ["podman", operation, image_source, image_destination]
-            podman_command = cls.do_i_skip_tls(podman_command)
-            log_msg = "Image pushed from %s to %s <---" % (image_source, image_destination)
-        elif operation == "pull":
-            podman_command = ["podman", operation, image_source]
-            podman_command = cls.do_i_skip_tls(podman_command)
-            log_msg = "Image pulled from %s <---" % image_source
-        try:        
-             subprocess.check_output(podman_command)
-             logging.info(log_msg)
-             
-        except subprocess.CalledProcessError as e:
-            if operation == "push":
-                subprocess.check_output(podman_command)
-            logging.critical("Error while attempting to %s the image: %s <---" % (operation, image_and_tag))
-            if not args.skip_broken_images:
-                exit(1)
 
     @classmethod
     def do_i_skip_tls(cls, command: list[str]) -> list[str]:
         """
-        Description: Adds the `--tls-verify=false` flag to the specified command if `args.skip_tls_verify` is True.
-
+        Description: 
+            Adds the `--tls-verify=false` flag to the specified command if `args.skip_tls_verify` is True.
         Args:
             command: The command to add the flag to.
-
         Returns:
             The updated command.
         """
@@ -166,16 +66,123 @@ class ImageMover:
             command.append("--tls-verify=false")
         return(command)
 
+class PreflightChecker:
+    def __init__(self):
+        pass
+
+    def check_dns(self, server: str) -> bool:
+        """
+        Description: 
+            Checks if the specified server can be resolved by DNS.
+        Args:
+            server: The server to check.
+        Returns:
+            True if the server can be resolved, False otherwise.
+        """
+
+        try:
+            ip_address = socket.gethostbyname(server)
+            logging.info(f"{server} resolves to --> {ip_address} <--")
+            return True
+        except socket.gaierror:
+            logging.critical(f"--> DNS lookup failed for host {server} <----")
+            exit(1)
+
+    def check_port(self, server: str) -> bool:
+        """
+        Description:
+            Checks if the specified server is listening on the specified port.
+        Args:
+            server: The server to check.
+            port: The port to check.
+        Returns:
+            True if the server is listening on the specified port, False otherwise.
+        """
+
+        quay_port = 443
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((server, quay_port))
+            logging.info(f"{server} is listening on port {quay_port}")
+            return True
+        except ConnectionRefusedError:
+            logging.critical("%s refused the connection on port %s" % quay_port)
+            exit(1)
+
+
+class ImageMover(BaseOperations):
+
+    def login_to_quay(self, server: str, username: str, password: str) -> None:
+        """
+        Description: 
+            Logs in to Quay on the specified server.
+        Args:
+            server: The server to log in to.
+            username: The Quay username.
+            password: The Quay password.
+        Returns:
+            None
+        """
+
+        try:
+            podman_login_command = [
+                "podman",
+                "login",
+                f"-u={username}",
+                f"-p={password}",
+                server,
+            ]
+            podman_login_command = self.do_i_skip_tls(podman_login_command)
+            subprocess.check_output(podman_login_command)
+        except subprocess.CalledProcessError as e:
+            logging.critical("--> Error logging in to Quay:")
+            exit(1)
+        logging.info(f"Logged in to: {server}")
+ 
+    @classmethod
+    def podman_operations(cls, operation, image_source=None, image_destination=None, image_and_tag=None):
+        """
+        Description: 
+            Performs a Podman operation on an image.
+        Args:
+            operation (str): The Podman operation to perform (e.g., "tag", "push", "pull").
+            image_source (str): The source image for the operation.
+            image_destination (str): The destination image for the operation.
+            image_and_tag (str): The image and tag to use for the operation.
+        Returns:
+            None
+        """
+        if operation == "tag":
+            podman_command = ["podman", operation, image_source, image_destination]
+            log_msg = f"Image tagged: {image_destination} <---"
+        elif operation == "push":
+            podman_command = ["podman", operation, image_source, image_destination]
+            podman_command = cls.do_i_skip_tls(podman_command)
+            log_msg = f"Image pushed from {image_source} to {image_destination} <---"
+        elif operation == "pull":
+            podman_command = ["podman", operation, image_source]
+            podman_command = cls.do_i_skip_tls(podman_command)
+            log_msg = f"Image pulled from {image_source} <---"
+        try:        
+            subprocess.check_output(podman_command)
+            logging.info(log_msg) 
+        except subprocess.CalledProcessError as e:
+            if operation == "push":
+                subprocess.check_output(podman_command)
+            logging.critical(
+                f"Error while attempting to {operation} the image: {image_and_tag} <---"
+            )
+            if not args.skip_broken_images:
+                exit(1)
 
 class QuayAPI:
     def __init__(self, base_url: str = None, api_token: str = None) -> None:
         """
-        Description: Initialize a new instance of the QuayAPI class.
-
+        Description: 
+            Initialize a new instance of the QuayAPI class.
         Args:
             base_url (str, optional): The base URL of the Quay API. Defaults to None.
             api_token (str, optional): The API token for authentication. Defaults to None.
-        
         Returns:
             None
         """
@@ -188,55 +195,53 @@ class QuayAPI:
 
     def check_if_object_exists(self, repo_name: str = None, org_name: str = None) -> bool:
         """
-        Description: Check if an object (repository or organization) exists in a GitHub repository.
-
+        Description: 
+            Check if an object (repository or organization) exists in a GitHub repository.
         Args:
             repo_name (str, optional): The name of the repository to check. Defaults to None.
             org_name (str, optional): The name of the organization to check. Defaults to None.
-
         Returns:
             bool: True if the object exists, False otherwise.
         """
         # If both repo_name and org_name are None, raise a ValueError
         if not repo_name and not org_name:
             raise ValueError("Either repo_name or org_name must be provided.")
-        
+
         # Set the endpoint and object_type based on whether org_name is set
         if org_name:
             endpoint = self.org_endpoint + org_name
             object_type = "organization"
         else:
-            endpoint = "api/v1/repository/" + org_name + "/" + repo_name
+            endpoint = f"api/v1/repository/{org_name}/{repo_name}"
             object_type = "repository"
-        
+
         working_url = f'{self.base_url}{endpoint}'
         search_for_object = self.get_data(url=working_url)
         if search_for_object is None:
             return True
-        else:
-            try:
-                if search_for_object['name'] == org_name:
-                    logging.info("Organization already exists in destination: %s <---\n"  % org_name)
-                    return False
-            except:
-                logging.error("Error getting %s from %s" % (object_type, working_url))
-                return True
+
+        try:
+            if search_for_object['name'] == org_name:
+                logging.info(f"Organization already exists in destination: {org_name} <---\n")
+                return False
+        except:
+            logging.error(f"Error getting {object_type} from {working_url}")
+            return True
         
         if search_for_object.get('error_type') is None:
-            logging.info(object_type + " exists")
+            logging.info(f"{object_type} exists")
             return(False)
         else:
-            logging.error("error getting %s: " % object_type)
+            logging.error(f"error getting {object_type}: ")
             return(True)
 
 
     def create_org(self, org_name):
         """
-        Description: Create a new organization on Quay.
-
+        Description: 
+            Create a new organization on Quay.
         Args:
             org_name (str): The name of the organization to create.
-
         Returns:
             bool: True if the organization was created successfully, False otherwise.
         """
@@ -244,10 +249,10 @@ class QuayAPI:
         data = {
             'name': org_name
         }
-        logging.info("Attempting to create organization: %s" % org_name)
+        logging.info(f"Attempting to create organization: {org_name}")
         response = requests.post(f'{self.base_url}{self.org_endpoint}', headers=headers, json=data)
         if response.status_code == 201:
-            logging.info("Organization created successfully: %s" % org_name)
+            logging.info(f"Organization created successfully: {org_name}")
             return
         else:
             logging.critical("Error creating organization")
@@ -256,13 +261,14 @@ class QuayAPI:
 
     def get_data(self, url: str = None) -> dict:
         """
-        Description: Fetches data from the Quay API.
+        Description: 
+            Fetches data from the Quay API.
         Args:
             url (str): The URL to fetch data from. If not specified, uses the default Quay repository URI.
         Returns:
             dict: A dictionary containing the JSON response from the API.
         """
-        if url == None:
+        if url is None:
             url = self.quay_repo_uri
         headers = {'Authorization': f'Bearer {self.api_token}'}
         response = requests.get(f'{url}', headers=headers)
@@ -284,13 +290,14 @@ class QuayAPI:
         
     def get_tag_info(self, href: str) -> list:
         """
-        Description: Gets information about tags in a Quay repository.
+        Description: 
+            Gets information about tags in a Quay repository.
         Args:
             href (str): The href of the repository to fetch tag information for.
         Returns:
             list: A list of dictionaries, each representing a tag in the repository.
         """
-        working_url = self.base_url + "api/v1" + href + "/tag"
+        working_url = f"{self.base_url}api/v1{href}/tag"
         tag_info = self.get_data(url=working_url)
         tag_list = []
         for tag in tag_info['tags']:
@@ -304,16 +311,16 @@ if __name__ == "__main__":
                 add_key(v, key)
             else:
                 v[key] = None
-
+    quay_config = BaseOperations(args.config_file)
     mover= ImageMover(args.config_file)
     preflight = PreflightChecker()
 
-    if not mover.failover:
-        source_server = mover.source_server
-        destination_server = mover.destination_server
+    if not quay_config.failover:
+        source_server = quay_config.source_server
+        destination_server = quay_config.destination_server
     else:
-        source_server = mover.destination_server
-        destination_server = mover.source_server
+        source_server = quay_config.destination_server
+        destination_server = quay_config.source_server
 
     try:
         preflight.check_dns(source_server)
@@ -335,10 +342,10 @@ if __name__ == "__main__":
     source_url = "https://%s/" % source_server
 
     # Create an instance of QuayAPI for the source server
-    source_quay_api = QuayAPI(base_url=source_url, api_token=mover.source_token)
+    source_quay_api = QuayAPI(base_url=source_url, api_token=quay_config.source_token)
 
     # Create an instance of the QuayAPI class for the destination server
-    destination_quay_api = QuayAPI(base_url=destination_url, api_token=mover.destination_token)
+    destination_quay_api = QuayAPI(base_url=destination_url, api_token=quay_config.destination_token)
 
     # Call the functions and pass in the token as an argument
     source_data = source_quay_api.get_data()
@@ -367,7 +374,7 @@ if __name__ == "__main__":
         # Check if the organization needs to be created on the destination server
         create_org = destination_quay_api.check_if_object_exists(org_name=org)
         if create_org:
-            logging.info("Organization does not exist: %s <---" % org)
+            logging.info(f"Organization does not exist: {org} <---")
             destination_quay_api.create_org(org)
             time.sleep(3)
     
@@ -381,8 +388,8 @@ if __name__ == "__main__":
             tag_list = source_quay_api.get_tag_info(repo)
             # Loop through the tags and add them to the image_dict
             for tag in tag_list:
-                organization = repo.split("/")[2]
-                image_and_tag = repo.split("/")[3] + ":" + tag
+                organization = repo.split("/")[-2]
+                image_and_tag = repo.split("/")[-1] + ":" + tag
 
                 # If the organization already exists in the image_dict, append the image and tag to the list
                 if organization in image_dict:
@@ -404,9 +411,9 @@ if __name__ == "__main__":
                 ImageMover.podman_operations(operation="push", image_source=source_image_name, image_destination=destination_image_name, image_and_tag=repo_and_tag)
     else:
         try:
-            for repository in mover.repositories:
-                image_source_name = mover.source_server + "/" + repository
-                image_destination_name = mover.destination_server + "/" + repository
+            for repository in quay_config.repositories:
+                image_source_name = source_server + "/" + repository
+                image_destination_name = destination_server + "/" + repository
                 print("")
                 ImageMover.podman_operations(operation="pull", image_source=image_source_name, image_and_tag=repository)
                 ImageMover.podman_operations(operation="tag", image_source=image_source_name, image_destination=image_destination_name, image_and_tag=repository)
