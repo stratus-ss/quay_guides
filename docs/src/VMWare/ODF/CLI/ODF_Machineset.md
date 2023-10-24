@@ -12,11 +12,16 @@ metadata:
   namespace: openshift-machine-api
 spec:
   replicas: 3
+  selector:
+    matchLabels:
+      machine.openshift.io/cluster-api-cluster: <infra_id>
+      machine.openshift.io/cluster-api-machineset: <infra_id>-worker-0
   template:
     metadata:
       labels:
         machine.openshift.io/cluster-api-machine-role: worker
         machine.openshift.io/cluster-api-machine-type: worker
+        machine.openshift.io/cluster-api-machineset: <infra_id>-worker-0
     spec:
       metadata:
         labels:
@@ -40,11 +45,12 @@ spec:
           numCPUs: 11
           kind: VSphereMachineProviderSpec
           workspace:
-            datacenter: <dc>
-            datastore: <datastore>
-            folder: <folder>
-            server: <vcenter>
-          template: <clustername>-rhcos-generated-region-generated-zone
+            datacenter: <datacentre>
+            datastore: /<datacentre>/datastore/OCP
+            folder: /<datacentre>/vm/<infra_id>
+            resourcePool: /<datacentre>/<resource pool>
+            server: vcenter.x86experts.com
+          template: <infra_id>-rhcos-generated-region-generated-zone
           apiVersion: machine.openshift.io/v1beta1
       taints:
         - effect: NoSchedule

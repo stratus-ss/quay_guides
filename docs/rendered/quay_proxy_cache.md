@@ -25,7 +25,7 @@ FEATURE_PROXY_CACHE: true
 
 * Click Save
 
-![Proxy](../images/proxy_cache_quay.png)
+![Proxy](../../images/proxy_cache_quay.png)
 
 
 Now pull an image
@@ -50,17 +50,17 @@ FEATURE_QUOTA_MANAGEMENT: true
 Create a new organization, click on the Create New Organization button. Enter a new name (testorg in this case) and click Create Organization
 
 2. Ensure that you are logged in as the Super User in Quay then under Organizations, click on the gear and select "Configure Quota"
-![quay_quotas.png](../images/quay_quotas.png)
+![quay_quotas.png](../../images/quay_quotas.png)
 
 3. Set the storage quota as per your requirements and click "Apply".
 
-![quay_quota_size.png](../images/quay_quota_size.png)
+![quay_quota_size.png](../../images/quay_quota_size.png)
 
 ### (Optional) Rejection/Warning Limits
 
 From the superuser panel, navigate to the Manage Organizations tab. Click the Options icon for the organization and select Configure Quota. In the Quota Policy section, with the Action type set to Reject, set the Quota Threshold 
 
-![quay_quota_reject.png](../images/quay_quota_reject.png)
+![quay_quota_reject.png](../../images/quay_quota_reject.png)
 
 
 # Auto prune feature
