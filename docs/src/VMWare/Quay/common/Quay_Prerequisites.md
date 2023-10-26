@@ -13,3 +13,8 @@ For more information please see the [official documentation](https://access.redh
 > Quay ConfigEditor: 0.2 vCPU & 500Mi Ram
 >
 > Additional components such as clair, HPA, etc have even greater resource requirements.
+
+Aside from the hardware requirements, the following software related requirements need to met:
+
+1. A namespace/project in which the quay objects will reside.
+2. Access to the Operator Catalog

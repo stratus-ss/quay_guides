@@ -32,6 +32,11 @@ metadata:
 ' | oc apply -f -
 ```
 
+This process will create several CRDs in the cluster as well as creating an operator pod called `quay-operator.v<version>`. This pod is in charge of reconciling various UI and CLI interactions with Quay.
+
+> [!IMPORTANT]
+> Red Hat Quay running on top of OpenShift relies heavily on its' Postgres database. While standalone Quay has a lot of options with regards to editing flat files, Quay on OpenShift stores the majority of its information in the database. If changes you make are not being reflected in the pod, its likely there is a problem with the operator.
+
 ## Create `QuayRegistry`
 
 The next step required for installing Quay is the `QuayRegistry` object. It consists of a definition of which components should be installed and managed by the Quay Operator. In addition, this object also references the `init-config-bundle-secret` that was created earlier. Generally speaking, the `QuayRegistry` object should be created in whatever namespace/project has been dedicated to holding Quay.  Below is a `QuayRegistry` with all of the components installed and managed by the operator:
