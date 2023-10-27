@@ -12,6 +12,7 @@ echo "- [Introduction](Intro.md)
     - [Quay Config: Create QuayRegistry](Quay_CLI_Objects.md)
     - [OPTIONAL: Quay Mirror](Quay_CLI_Mirror.md)
     - [OPTIONAL: Quay ProxyCache](Quay_CLI_ProxyCache.md)
+    - [OPTIONAL: Create Initial Quay User](Quay_CLI_Initialize.md)
 " > tmp/summary.md
 
 
@@ -20,7 +21,7 @@ for file in Intro.md Quay_Prerequisites.md Quay_UI_Install.md InitConfigBundle.m
   ln -s ../UI/"${file}"
 done
 
-for file in Quay_CLI_Install.md InitConfigBundle.md Quay_CLI_Objects.md Quay_CLI_Mirror.md Quay_CLI_ProxyCache.md; do
+for file in Quay_CLI_Install.md InitConfigBundle.md Quay_CLI_Objects.md Quay_CLI_Mirror.md Quay_CLI_ProxyCache.md Quay_CLI_Initialize.md; do
   ln -s ../CLI/"${file}"
 done
 
