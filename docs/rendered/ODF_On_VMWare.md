@@ -1,12 +1,19 @@
 - [Introduction](#introduction)
-  - [ODF CLI Installation](#odf-cli-installation)
-    - [Create Machinesets](#create-machinesets)
-    - [Label Nodes](#label-nodes)
-    - [ODF Operator Installation](#odf-operator-installation)
-    - [ODF Storage Considerations](#odf-storage-considerations)
-      - [Optional: Local Storage Operator](#optional-local-storage-operator)
-      - [ODF Storage Serving Option 1: Multicloud Object Gateway](#odf-storage-serving-option-1-multicloud-object-gateway)
-      - [ODF Storage Serving Option 2: Noobaa](#odf-storage-serving-option-2-noobaa)
+- [Prerequisites](#prerequisites)
+  - [ODF Storage Considerations](#odf-storage-considerations)
+  - [Create Machinesets](#create-machinesets)
+    - [VIA CLI](#via-cli)
+    - [Via UI](#via-ui)
+- [ODF UI Operator Installation](#odf-ui-operator-installation)
+  - [Optional: Local Storage Operator](#optional-local-storage-operator)
+  - [ODF Storage Serving Option 1: Multicloud Object Gateway](#odf-storage-serving-option-1-multicloud-object-gateway)
+  - [ODF Storage Serving Option 2: Noobaa](#odf-storage-serving-option-2-noobaa-1)
+- [ODF CLI Operator Installation](#odf-operator-installation)
+  - [Label Nodes](#label-nodes)
+  - [ODF Operator Installation](#odf-operator-installation)
+  - [Optional: Local Storage Operator](#optional-local-storage-operator-1)
+  - [ODF Storage Serving Option 1: Multicloud Object Gateway](#odf-storage-serving-option-1-multicloud-object-gateway-1)
+  - [ODF Storage Serving Option 2: Noobaa](#odf-storage-serving-option-2-noobaa-1)
 
 # Introduction
 
@@ -18,40 +25,24 @@ The UI provides a more approachable way to discover the options which may be ava
 
 This specific guide is focused solely on options relevant to deploy to OpenShift 4.x on top of VMWare. While there is a lot of overlap for other deployment types (AWS, GCP, Azure etc) their specifics might vary wildly and therefore this guide should only be used as a rough approximation of how one might go about configuration Quay with ODF on other providers.
 
-## ODF CLI Installation
+# Prerequisites
 
-The below steps provide a solid example of how to setup ODF for supporting Quay. This guide assumes that ODF should be deployed to nodes that have `storage: odf` as the label.
+Regardless of whether installing via the CLI or the UI, ODF requires that decisions be made about both the backend storage which will support ODF as well as how ODF will be deployed to OpenShift.
 
-### Create The Namespaces
+## ODF Storage Considerations
 
-After the machines are configured appropriately, create the OpenShift namespaces required to handle ODF.
+When working within a VMWare environment there are a couple of options provided that the cluster was installed via the IPI method.
 
-```
-echo '
-apiVersion: v1
-kind: Namespace
-metadata:
-  labels:
-    openshift.io/cluster-monitoring: "true"
-  name: openshift-storage
-' | oc create -f -
-```
+First, it is possible to let the VMWare CSI driver handle the management of the ODF storage backend for the operator. This means that no additional configuration is required.
 
-> [!NOTE]
-> You do not ***need*** the Local Storage Operator when using an IPI installation. However, it is a valid deployment pattern.
-> If using the Local Storage Operator, its' namespace will need to be created as well.
->
-> ```
-> echo '
-> ---
-> apiVersion: v1
-> kind: Namespace
-> metadata:
->   name: openshift-local-storage
-> ' | oc create -f -
-> ```
+Second, the operator could opt to use the Local Storage Operator and bring their own disks to the vms that are hosting ODF.
 
-### Create Machinesets
+Both options have their advantages, and both are supported options within OpenShift.
+
+> [!WARNING]
+> If the cluster was installed via UPI, as of the time of this writing the only option is to use the local storage operator.
+
+## Create Machinesets
 
 The base requirement is that there are 3 nodes able to host ODF. According to [the official documentation](https://access.redhat.com/documentation/en-us/red_hat_openshift_data_foundation/4.12/html/planning_your_deployment/infrastructure-requirements_rhodf) ODF requires 30 vCPUs and 72G of ram across the 3 nodes. Below is a sample MachineSet definition that will meet the minimum requirements with a little bit of extra ram for overhead. Regardless of whether you install via the UI or the CLI, if you are creating machinesets for your ODF deployment the following Machineset can be used.
 
@@ -75,6 +66,7 @@ spec:
       labels:
         machine.openshift.io/cluster-api-machine-role: worker
         machine.openshift.io/cluster-api-machine-type: worker
+        machine.openshift.io/cluster-api-cluster: <infra_id>
         machine.openshift.io/cluster-api-machineset: <infra_id>-worker-0
     spec:
       metadata:
@@ -115,21 +107,158 @@ spec:
 > [!WARNING]
 > If you chose not to use a Machineset, you must label the nodes yourself.
 
-### Label Nodes
+### VIA CLI
 
-The CLI installation method in this guide assumes that nodes will use the label `storage: odf`. The `yaml` files found within all reference this label. Should you choose a different label the `yaml` files will need to be adjusted.
+After you have created the `odf_machineset.yaml`, simply apply it to the cluster:
+
+```
+oc apply -f odf_machineset.yaml -n openshift-machine-api
+```
+
+After several minutes you should see the following:
+
+```
+$ oc get machineset -n openshift-machine-api
+NAME                      DESIRED   CURRENT   READY   AVAILABLE   AGE
+odf-workers-0             3         3         3       3           21h
+```
+
+### Via UI
+
+# ODF UI Operator Installation
+
+### Install ODF Operator Via The UI
+
+In the UI, as a cluster admin user, navigate to **Operators --> Operators --> Operator Hub** and filter for ODF:
+
+![odf_ui_operator.png](../../images/odf_ui_operator.png)
+
+On the next screen just click install. There are no configurable options on this screen.
+
+![odf_ui_operator2.png](../../images/odf_ui_operator2.png)
+
+Finally, it is safe to accept the defaults. For more advanced users, these options can be adjusted.
+
+![odf_ui_operator3.png](../../images/odf_ui_operator3.png)
+
+At this point the operator is installed and ready to be configured. Jump to either the Noobaa or Multicloud Object Gateway sections below
+
+## Optional: Local Storage Operator
+
+### Installing Local Storage Operator
+
+To install the Local Storage Operator via the UI, click on **Operators --> OperatorHub** then filter for `local storage` and click on the `Local Storage provided by Red Hat` from the options below:
+
+![odf_ui_localstorage.png](../../images/odf_ui_localstorage.png)
+
+The next screen is basic information about the operator. Once the information has been reviewed, click `Install`
+
+![odf_ui_localstorage2.png](../../images/odf_ui_localstorage2.png)
+
+On the next screen, the default options are sufficient.
 
 > [!NOTE]
-> Red Hat recommends labeling the ODF nodes with the infrastructure label `node-role.kubernetes.io/infra=""`
+> As in the screenshot below, if the `openshift-local-storage` namespace does not exist, it will be created during this process
 
-Nodes can be labeled with the following:
+![odf_ui_localstorage3.png](../../images/odf_ui_localstorage3.png)
+
+### Installing Local Storage Discovery
+
+While there is an option to specify which drives in a system will be used for the Local Storage Operator, it is often preferable to use the `Local Storage Discovery`. This will allow OpenShift to scan the hosts and automatically determine which disks to add for local storage.
+
+![odf_ui_localdiscovery.png](../../images/odf_ui_localdiscovery.png)
+
+It is possible to use the form view to populate the appropriate options for the `LocalVolumeDiscovery`, however for this guide, the definition is fairly short and is simpler to insert the appropriate YAML definition.
+
+![odf_ui_localdiscovery2.png](../../images/odf_ui_localdiscovery2.png)
+
+After creating the LocalVolumeDiscovery, you can click on the `auto-discover-devices` link.
+
+![odf_ui_localdiscovery3.png](../../images/odf_ui_localdiscovery3.png)
+
+Viewing the events shows that the hosts are identified and the disks are found after a short period of time.
+
+![odf_ui_localdiscovery4.png](../../images/odf_ui_localdiscovery4.png)
+
+## ODF Storage Serving Option 1: Multicloud Object Gateway
+
+> [!IMPORTANT]
+> The OCP console UI needs to be refreshed before continuing or else the `Data Foundation` menu entry will not appear!
+
+The next step is to create a Storage System for ODF to present to the cluster.
+
+> [!WARNING]
+> At the current time it is not recommended to follow the prompts of the ODF Operator post-install.
+
+To create a Storage System click on **Storage --> Data Foundation --> Storage System**. Initially there should be a green check mark :white_check_mark: beside the `Data Foundation` in the Status section of the overview:
+
+![odf_ui_storagesystem.png](../../images/odf_ui_storagesystem.png)
+
+Click on `Create StorageSystem`:
+
+![odf_ui_storagesystem2.png](../../images/odf_ui_storagesystem2.png)
+
+There are several storage backing options presented. In this guide, the Local Storage Operator is presented as an option but using the VMWare CSI driver (indicated via the Storage Class `thin-csi`) is the easiest option:
+
+![odf_ui_storagesystem3.png](../../images/odf_ui_storagesystem3.png)
+
+On the next screen, select the storage options that make sense for your environment in terms of capacity. If the machineset was created properly, the nodes in the ODF machineset will automatically be selected. If not, the appropriate nodes can be manually selected. Once confirmed the selected nodes will have the `cluster.ocs.openshift.io/openshift-storage` label applied to them for the deployment.
+
+Optionally, taint the nodes to ensure they are dedicated to ODF. Click next when ready.
+
+![odf_ui_storagesystem4.png](../../images/odf_ui_storagesystem4.png)
+
+The next screen will provide encryption options as well as networking options, though at the time of writing only the `Default (SDN)` is supported.
+
+![odf_ui_storagesystem5.png](../../images/odf_ui_storagesystem5.png)
+
+Finally confirm the previous selections by clicking `Create StorageSystem`
+![odf_ui_storagesystem6.png](../../images/odf_ui_storagesystem6.png)
+
+## ODF Storage Serving Option 2: Noobaa
+
+If you do not have need for block or file storage provided by ODF you can opt to install only the Noobaa component. This consists of Noobaa itself as well as a BackingStore. The below definitions can have their resources adjusted based on how busy the environment is
 
 ```
-oc label node $x node-role.kubernetes.io/infra=""
-oc label node $x stroage=odf
+echo '
+apiVersion: noobaa.io/v1alpha1
+kind: NooBaa
+metadata:
+  name: noobaa
+  namespace: openshift-storage
+spec:
+ dbResources:
+   requests:
+     cpu: '2'
+     memory: 8Gi
+ dbType: postgres
+ coreResources:
+   requests:
+     cpu: '2'
+     memory: 8Gi
+---
+apiVersion: noobaa.io/v1alpha1
+kind: BackingStore
+metadata:
+  finalizers:
+  - noobaa.io/finalizer
+  labels:
+    app: noobaa
+  name: noobaa-pv-backing-store
+  namespace: openshift-storage
+spec:
+  pvPool:
+    numVolumes: 1
+    resources:
+      requests:
+        storage: 100Gi
+  type: pv-pool
+' | oc create -f -
 ```
 
-### ODF Operator Installation
+After this a Noobaa backend should eventually become available. The Quay Operator will detect this automatically if the option to manage storage is turned on in Quay (which is its' default).
+
+# ODF CLI Operator Installation
 
 The above can be done in an scriptable fashion. The operator requires an Operator Group and a Subscription. Post-install configurations, with regards to Quay are documented in either the section for Noobaa or the Multicloud Object Gateway below.
 
@@ -162,18 +291,54 @@ spec:
 
 At this point a decision needs to be made whether to use Noobaa by itself or whether to deploy the Multicloud Object Gateway.
 
-### ODF Storage Considerations
+## Label Nodes
 
-When working within a VMWare environment there are a couple of options provided that the cluster was installed via the IPI method.
+The CLI installation method in this guide assumes that nodes will use the label `storage: odf`. The `yaml` files found within all reference this label. Should you choose a different label the `yaml` files will need to be adjusted.
 
-First, it is possible to let the VMWare CSI driver handle the management of the ODF storage backend for the operator. This means that no additional configuration is required.
+> [!NOTE]
+> Red Hat recommends labeling the ODF nodes with the infrastructure label `node-role.kubernetes.io/infra=""`
 
-Second, the operator could opt to use the Local Storage Operator and bring their own disks to the vms that are hosting ODF.
+Nodes can be labeled with the following:
 
-> [!WARNING]
-> If the cluster was installed via UPI, as of the time of this writing the only option is to use the local storage operator.
+```
+oc label node $x node-role.kubernetes.io/infra=""
+oc label node $x stroage=odf
+```
 
-#### Optional: Local Storage Operator
+## ODF Operator Installation
+
+The above can be done in an scriptable fashion. The operator requires an Operator Group and a Subscription. Post-install configurations, with regards to Quay are documented in either the section for Noobaa or the Multicloud Object Gateway below.
+
+You can use these definitions to install the operator
+
+```
+echo '
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: openshift-storage-operatorgroup
+  namespace: openshift-storage
+spec:
+  targetNamespaces:
+  - openshift-storage
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: odf-operator
+  namespace: openshift-storage
+spec:
+  channel: stable-4.13
+  installPlanApproval: Automatic
+  name: odf-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+' | oc apply -f -
+```
+
+At this point a decision needs to be made whether to use Noobaa by itself or whether to deploy the Multicloud Object Gateway.
+
+## Optional: Local Storage Operator
 
 The installation and configuration of the Local Storage Operator entails the creation of 5 objects within OpenShift.
 
@@ -188,7 +353,7 @@ The first three objects require no modification or customization as they are sta
 > [!IMPORTANT]
 > While it is *technically* possible to have disks of different sizes available to ODF, this is not supported. Choose disks of a reasonable size for your environment. If you are ever required to grow the storage Red Hat exepcts all disks to be the same size. See the [official documentation](https://access.redhat.com/documentation/en-us/red_hat_openshift_data_foundation/4.13/html-single/scaling_storage/index#scaling-up-storage-by-adding-capacity-to-openshift-data-foundation-nodes-using-local-storage-devices_local-vmware) for more information
 
-##### Ensuring Namespace Exists
+### Ensuring Namespace Exists
 
 The first object, the namespace, was listed under the [installation section](#odf-cli-installation). For completeness below is the code to create a namespace for the Local Storage Operator:
 
@@ -202,7 +367,7 @@ metadata:
 ' | oc apply -f -
 ```
 
-##### Creating The Operator Group & Subscription
+### Creating The Operator Group & Subscription
 
 The Operator Group and the Subscription are required in order for the Local Storage Operator to be installed. After the creation of these objects, OpenShift will create the CRDs required for the creation of local storage on specific machines.
 
@@ -234,7 +399,7 @@ spec:
 ' | oc apply -f -
 ```
 
-##### LocalVolumeDiscovery
+### LocalVolumeDiscovery
 
 This object can and should be modified if the label `storage: odf` is not being used in the cluster. The below definition uses a `nodeSelector` to ensure that the volume discovery will only apply to ODF nodes
 
@@ -261,7 +426,7 @@ spec:
 | oc apply -f -
 ```
 
-##### LocalVolumeSet
+### LocalVolumeSet
 
 This object defines for the LocalVolumeDiscovery the attributes of the local storage to use. The below definition says to look for partitions or disks that are considered "NonRotational" (i.e. SSDs and the like), with a minimum size of 1Gi. This file also uses a `nodeSelector` to ensure that it only applies to the `storage: odf` label.
 
@@ -305,7 +470,7 @@ oc get all -n openshift-local-storage
 oc get pv
 ```
 
-#### ODF Storage Serving Option 1: Multicloud Object Gateway
+## ODF Storage Serving Option 1: Multicloud Object Gateway
 
 To proceed with the full installation of ODF, enabling all of its' storage serving options, a Storage Cluster will need to be created after the ODF Operator has completed its' installation.
 
@@ -429,7 +594,7 @@ At this point the ODF cluster should be ready to serve storage to the cluster.
 > oc patch console.operator cluster -n openshift-storage --type json -p '[{"op": "add", "path": "/spec/plugins", "value": ["odf-console"]}]'
 > ```
 
-#### ODF Storage Serving Option 2: Noobaa
+## ODF Storage Serving Option 2: Noobaa
 
 If you do not have need for block or file storage provided by ODF you can opt to install only the Noobaa component. This consists of Noobaa itself as well as a BackingStore. The below definitions can have their resources adjusted based on how busy the environment is
 

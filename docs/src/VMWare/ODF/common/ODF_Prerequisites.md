@@ -1,0 +1,1 @@
+Regardless of whether installing via the CLI or the UI, ODF requires that decisions be made about both the backend storage which will support ODF as well as how ODF will be deployed to OpenShift.

@@ -6,7 +6,7 @@ The next step is to create a Storage System for ODF to present to the cluster.
 > [!WARNING]
 > At the current time it is not recommended to follow the prompts of the ODF Operator post-install.
 
-To create a Storage System click on **Storage --> Data Foundation --> Storage System**. Initially there should be a green check mark :white_check_mark: best the `Data Foundation` in the Status section of the overview:
+To create a Storage System click on **Storage --> Data Foundation --> Storage System**. Initially there should be a green check mark :white_check_mark: beside the `Data Foundation` in the Status section of the overview:
 
 ![odf_ui_storagesystem.png](../../images/odf_ui_storagesystem.png)
 
