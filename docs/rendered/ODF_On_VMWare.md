@@ -33,9 +33,9 @@ Regardless of whether installing via the CLI or the UI, ODF requires that decisi
 
 When working within a VMWare environment there are a couple of options provided that the cluster was installed via the IPI method.
 
-First, it is possible to let the VMWare CSI driver handle the management of the ODF storage backend for the operator. This means that no additional configuration is required.
+First, it is possible to let the VMWare CSI driver dynamically provision the persistent volume claims (PVC) for the Red Hat OpenShift Data Foundation (RHODF) storage backend. This means that no additional configuration is required.
 
-Second, the operator could opt to use the Local Storage Operator and bring their own disks to the vms that are hosting ODF.
+Second, the operator could opt to use the Local Storage Operator (LSO) and attach their own disks to the vms that are hosting ODF.
 
 Both options have their advantages, and both are supported options within OpenShift.
 
