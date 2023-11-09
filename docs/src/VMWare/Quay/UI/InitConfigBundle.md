@@ -1,0 +1,1 @@
+../common/InitConfigBundle.md

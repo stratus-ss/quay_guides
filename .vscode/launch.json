@@ -1,0 +1,18 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            //"args": [ "--username=quayadmin", "--password=password", "--add-robot-account", "--config-file=/home/ocp/git_projects/quay_guides/apps/quay_sync/sample_config.yaml", "--skip-tls-verify", "--skip-broken-images", "--auto-discovery"]
+            "args": [ "--setup-quay-openshift", "--config-file=/home/ocp/git_projects/quay_guides/apps/quay_management/config/sample_config.yaml", "--skip-tls-verify"]
+        }
+    ]
+}
