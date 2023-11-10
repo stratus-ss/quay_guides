@@ -121,5 +121,5 @@ if __name__ == "__main__":
                         time.sleep(700)
     end_time = time.perf_counter()
     total_time = math.ceil((end_time - start_time)/60)
-    logging.info(f"Total run time ---> {total_time} <---")
+    logging.info(f"Total run time ---> {total_time} minutes <---")
     logging.info(f"----> Finished at {datetime.datetime.now()}")

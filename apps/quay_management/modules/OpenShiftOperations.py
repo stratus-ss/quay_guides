@@ -143,25 +143,32 @@ class OpenShiftCommands:
             return False
 
     @staticmethod
-    def openshift_ready_check(output: dict = None, status: str = "conditions"):
+    def openshift_ready_check(output: dict = None, status: str = "conditions", crd: str = None):
         object_ready = {}
-        for x in output['items']:         
-            object_name = x['metadata']['name']
-            if status == "phase":
-                if x['status'][status] == "Succeeded":
-                    # Assuming any pod that has succeeded shouldn't be running anyways 
-                    # as it is likely a job pod
-                    continue
-                elif x['status'][status] == "Running":
-                    object_ready[object_name] = True
+        if crd:
+            if output['items'][0]:
+                object_name = output['items'][0]['metadata']['name']
+                object_ready[object_name] = True
+            else:
+                object_ready[crd] = False
+        else:
+            for x in output['items']:         
+                object_name = x['metadata']['name']
+                if status == "phase":
+                    if x['status'][status] == "Succeeded":
+                        # Assuming any pod that has succeeded shouldn't be running anyways 
+                        # as it is likely a job pod
+                        continue
+                    elif x['status'][status] == "Running":
+                        object_ready[object_name] = True
+                    else:
+                        object_ready[object_name] = False
                 else:
                     object_ready[object_name] = False
-            else:
-                object_ready[object_name] = False
-                for y in x['status'][status]:
-                    if y['type'] == "Ready":
-                        if y['status'] == "True":
-                            object_ready[object_name] = True
+                    for y in x['status'][status]:
+                        if y['type'] == "Ready":
+                            if y['status'] == "True":
+                                object_ready[object_name] = True
         return(object_ready)
 
     @staticmethod 
@@ -244,7 +251,7 @@ class OpenShiftCommands:
                 counter += 1
                 continue
             output = yaml.load(output, Loader=yaml.FullLoader)
-            object_ready = OpenShiftCommands.openshift_ready_check(output=output)
+            object_ready = OpenShiftCommands.openshift_ready_check(output=output, crd=crd)
             if object_ready:
                 if replicas:
                     if len(object_ready) == replicas:
