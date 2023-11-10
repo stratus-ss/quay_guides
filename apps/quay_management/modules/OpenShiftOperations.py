@@ -146,11 +146,15 @@ class OpenShiftCommands:
     def openshift_ready_check(output: dict = None, status: str = "conditions", crd: str = None):
         object_ready = {}
         if crd:
-            if output['items'][0]:
-                object_name = output['items'][0]['metadata']['name']
-                object_ready[object_name] = True
-            else:
-                object_ready[crd] = False
+            try:
+                if output['items'][0]:
+                    object_name = output['items'][0]['metadata']['name']
+                    object_ready[object_name] = True
+                else:
+                    object_ready[crd] = False
+            except:
+                # If it errors its likely the items are empty because it hasnt finished initializing
+                pass
         else:
             for x in output['items']:         
                 object_name = x['metadata']['name']
