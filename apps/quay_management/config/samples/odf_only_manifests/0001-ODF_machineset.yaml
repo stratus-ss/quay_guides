@@ -1,0 +1,52 @@
+apiVersion: machine.openshift.io/v1beta1
+kind: MachineSet
+metadata:
+  name: odf-workers-0
+  namespace: openshift-machine-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      machine.openshift.io/cluster-api-cluster: <INFRAID>
+      machine.openshift.io/cluster-api-machineset: <INFRAID>-odf-workers-0
+  template:
+    metadata:
+      labels:
+        machine.openshift.io/cluster-api-cluster: <INFRAID>
+        machine.openshift.io/cluster-api-machine-role: worker
+        machine.openshift.io/cluster-api-machine-type: worker
+        machine.openshift.io/cluster-api-machineset: <INFRAID>-odf-workers-0
+    spec:
+      metadata:
+        labels:
+          storage: odf
+          cluster.ocs.openshift.io/openshift-storage: ''
+          node-role.kubernetes.io/infra: ''
+          node-role.kubernetes.io/worker: ''
+      providerSpec:
+        value:
+          numCoresPerSocket: 1
+          diskGiB: 120
+          snapshot: ''
+          userDataSecret:
+            name: worker-user-data
+          memoryMiB: 28672
+          credentialsSecret:
+            name: vsphere-cloud-credentials
+          network:
+            devices:
+              - networkName: VM Network
+          numCPUs: 11
+          kind: VSphereMachineProviderSpec
+          workspace:
+            datacenter: <datacenter>
+            datastore: /<datacenter>/datastore/OCP
+            folder: /<datacenter>/vm/<INFRAID>
+            resourcePool: /<datacenter>/host/<vmware cluster>/Resources
+            server: <vsphere url>
+          apiVersion: machine.openshift.io/v1beta1
+          template: <INFRAID>-rhcos-generated-region-generated-zone
+      taints:
+        - effect: NoSchedule
+          key: node.ocs.openshift.io/storage
+          value: 'true'

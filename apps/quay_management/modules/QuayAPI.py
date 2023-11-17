@@ -13,23 +13,23 @@ class QuayAPI:
         Returns:
             None
         """
-
         self.api_token = api_token
         self.base_url = base_url
-        self.repo_endpoint= self.base_url + "api/v1/find/repositories"
-        self.org_endpoint = "api/v1/organization/"
+        self.repo_endpoint= self.base_url + "/api/v1/find/repositories"
+        self.org_endpoint = "/api/v1/organization/"
         # The <org> is a placeholder so that it can be replaced as needed
-        self.proxycache_url = self.base_url + "api/v1/organization/<org>/proxycache"
-        self.initialize_url = self.base_url + "api/v1/user/initialize"
+        self.proxycache_url = self.base_url + "/api/v1/organization/<org>/proxycache"
+        self.initialize_url = self.base_url + "/api/v1/user/initialize"
         self.headers = {'Authorization': f'Bearer {self.api_token}'}
         self.admin_application_name = "quaysync"
-        
+        self.oauth_application_url = self.base_url + "/api/v1/organization/<org>/applications"
         if isinstance(robot_acct, dict):     
                 try:
                     if robot_acct["type"] == "org":
-                        robot_url = f"api/v1/organization/{robot_acct['org_name']}/robots/{robot_acct['name']}"
+                        robot_url = f"{self.base_url}/api/v1/organization/{robot_acct['org_name']}/robots/{robot_acct['name']}"
                     elif robot_acct["type"] == "personal":
-                        robot_url = f"api/v1/user/robots/{robot_acct['name']}"
+                        robot_url = f"{self.base_url}/api/v1/user/robots/{robot_acct['name']}"
+                    robot_acct['url'] = robot_url
                 except:
                     logging.error("Invalid input for robot account")
         elif robot_acct is None:
@@ -38,11 +38,11 @@ class QuayAPI:
         else:
             robot_url = ""
             logging.error(f"Expected robot acct to be a dict... got {type(robot_acct)}")
-        self.robot_url = self.base_url + robot_url
+
         self.robot_acct = robot_acct
 
 
-    def assemble_proxyurl(self, org_name: str = None) -> str:
+    def assemble_org_url(self, org_name: str = None, url_to_replace: str = None) -> str:
         """
         Description: 
             Assembles the proxycache URL, basic find/replace function
@@ -53,7 +53,7 @@ class QuayAPI:
             str: A full url to the proxycache endpoint
         """
 
-        url = self.proxycache_url.replace("<org>", org_name)
+        url = url_to_replace.replace("<org>", org_name)
         return url
 
     def check_if_object_exists(self, repo_name: str = None, org_name: str = None) -> bool:
@@ -106,22 +106,35 @@ class QuayAPI:
             org_name (str, optional): Name of the organization where proxycache is to reside. Defaults to None.
             json_data (dict, optional): A JSON object describing the proxycache configuration. Defaults to None.
         """
-        url = self.assemble_proxyurl(org_name=org_name)
+        url = self.assemble_org_url(org_name=org_name, url_to_replace=self.proxycache_url)
         proxy_create_response = self.post_data(url=url, data=json_data)
         if proxy_create_response.status_code != 201:
             logging.warning("----> Failed to create proxy cache")
             cleaned_text = json.loads(proxy_create_response.text)
-            logging.warning(cleaned_text['detail'])
-            logging.warning(f'Status code: {cleaned_text["status"]}')
+            logging.warning(cleaned_text)
+            logging.warning(f'Status code: {proxy_create_response.status_code}')
 
     def create_robot_acct(self):
         """
         Description:
             Creates a robot account in quay
         """
-        data= f"{self.robot_acct['name']}"
-        logging.info(f"Creating robot account {self.robot_acct['name']}")
-        response = self.put_data(url=self.robot_url)
+        data= f"{self.robot_acct}"
+        logging.info(f"Creating robot account {self.robot_acct}")
+        response = self.put_data(url=self.robot_acct['url'])
+        return(response)
+
+    def create_oauth_application(self, org_name: str = None, application_name: str = None):
+        """
+        Description:
+            Quay ties an oauth token to an application. Creates the base application in Quay
+        Args:
+            org_name (str, optional): Which organization the oauth application should be tied to. Defaults to None.
+            application_name (str, optional): A name given to identify the oauth token. Defaults to None.
+        """
+        url = self.assemble_org_url(org_name=org_name, url_to_replace=self.oauth_application_url)
+        data = {"name": application_name}
+        response = self.post_data(url=url, data=data)
         return(response)
 
     def create_org(self, org_name: str = None, override_headers: bool = False, additional_api_key: str = None):
@@ -156,6 +169,7 @@ class QuayAPI:
             Uses the Quay initialize endpoint to create the first user in Quay
         Args:
             user_info (dict, optional): JSON object containing the data required to initialize the user. Defaults to None.
+                                        {"username"}
 
         Returns:
             dict: Response object from the API
@@ -195,13 +209,13 @@ class QuayAPI:
         Args:
             org_name (str, optional): The organization where the proxycache config resides. Defaults to None.
         """
-        url = self.assemble_proxyurl(org_name=org_name)
+        url = self.assemble_org_url(org_name=org_name, url_to_replace=self.proxycache_url)
         proxy_delete_response = self.delete_data(url=url)
         if proxy_delete_response.status_code != 201:
             logging.warning("----> Failed to delete proxy cache")
             cleaned_text = json.loads(proxy_delete_response.text)
             logging.warning(cleaned_text['detail'])
-            logging.warning(f'Status code: {cleaned_text["status"]}')
+            logging.warning(f'Status code: {proxy_delete_response.status_code}')
 
     def get_oauth_client_id(self, admin_org_name: str = None, override_headers: bool = False, additional_api_key: str = None) -> str:
         client_id_endpoint = self.base_url + self.org_endpoint + admin_org_name + "/applications"
@@ -281,9 +295,9 @@ class QuayAPI:
             dict: The response data from the API
         """
         
-        url = self.assemble_proxyurl(org_name=org_name)
+        url = self.assemble_org_url(org_name=org_name, url_to_replace=self.proxycache_url)
         proxy_cache_info = self.get_data(url=url)
-        if not proxy_cache_info['upstream_registry']:
+        if not proxy_cache_info:
             return None
         return proxy_cache_info
 
@@ -294,7 +308,7 @@ class QuayAPI:
         Returns:
             dict: Response JSON from the API
         """
-        response = self.get_data(url=self.robot_url)
+        response = self.get_data(url=self.robot_acct['url'])
         logging.info(f"Retrieving robot account {self.robot_acct['name']}")
         return(response)
 
@@ -312,7 +326,7 @@ class QuayAPI:
         if headers_required:
             return(requests.post(f'{url}', headers=self.headers, json=data))
         else:
-            return(requests.post(f'{url}', json=data))
+             return(requests.post(f'{url}', json=data))
  
     def put_data(self, data: dict = None, url: str = None, headers_required=True ) -> dict:
         """

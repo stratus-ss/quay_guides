@@ -3,6 +3,7 @@ import yaml
 import subprocess
 import logging
 import time
+import base64
 
 class OpenShiftCommands:
     def __init__(self) -> None:
@@ -88,6 +89,17 @@ class OpenShiftCommands:
 
     @classmethod
     def openshift_get_object(cls, **kwargs):
+        """
+        Description: 
+            Gets an object from openshift and returns the yaml output
+
+        Args:
+            Takes **kwargs but current expects
+            object_type: usually pod, node, secret etc
+            object_name: the name of the object if required/known
+            label: A label used to identify the correct object
+            namespace: The namespace where the object resides (if any)
+        """
         check_command = ["oc", "get", kwargs["object_type"]]
         if kwargs.get("object_name"):
             check_command.extend([kwargs["object_name"]])
@@ -260,10 +272,12 @@ class OpenShiftCommands:
                 if replicas:
                     if len(object_ready) == replicas:
                          complete = OpenShiftCommands.openshift_object_ready(object_dict=object_ready, openshift_object=openshift_object)
+                         counter += 1
                          if complete:
                              return
                 else:
                     complete = OpenShiftCommands.openshift_object_ready(object_dict=object_ready, openshift_object=openshift_object)
+                    counter += 1
                     if complete:
                         return
             else:
@@ -316,3 +330,57 @@ class OpenShiftCommands:
                 counter +=1
         logging.critical(f"{openshift_object} did not become ready after {(iterations*delay_between_checks/60)} minutes")
         exit(1)
+
+    @staticmethod
+    def openshift_transfer_file(remote_filename: str = "/tmp/generic.py", 
+                                filename: str = None, 
+                                namespace: str = None, 
+                                pod_name: str = None):
+        """
+        Description: 
+            Transfers a file to a pod
+
+        Args:
+            remote_filename (str, optional): The location within the pod to create the file. Defaults to "/tmp/generic.py".
+            filename (str, optional): The path to the local file you intend to transfer. Defaults to None.
+            namespace (str, optional): Namespace where the pod resides. Defaults to None.
+            pod_name (str, optional): Name of the pod to transfer files to. Defaults to None.
+        """
+        ocp_cmd = ["oc", "cp", filename, f"{namespace}/{pod_name}:{remote_filename}"]
+        return(subprocess.check_output(ocp_cmd))
+    
+    @staticmethod
+    def openshift_exec_pod(command: list = None, pod_name: str = None, namespace: str = None):
+        """
+        Description: 
+            Execs into a pod to run a command
+
+        Args:
+            command (list, optional): A command broken into a list that subprocess can recognize. Defaults to None.
+            pod_name (str, optional): Name of the pod to exec into. Defaults to None.
+            namespace (str, optional): Namespace where the pod resides. Defaults to None.
+        
+        Returns: 
+            the response from subprocess
+        """
+        ocp_cmd = ["oc", "exec", "-n", namespace, "-it", pod_name, "--"]
+        ocp_cmd.extend(command)
+        return(subprocess.check_output(ocp_cmd))
+    
+    @staticmethod
+    def openshift_process_secret(secret: dict = None) -> dict:
+        """
+        Description:  
+            loops over the 'data' section of the secret to build a decoded dict
+
+        Args:
+            secret (dict, optional): takes a dict, presumably from a YAML. Defaults to None.
+
+        Returns:
+            dict: key/value dict of decoded secrets
+        """
+        secret_values = {}
+        for key in secret['data']:
+           secret_values[key] = base64.b64decode(secret['data'][key]).decode()
+        return(secret_values)
+        

@@ -2,6 +2,7 @@ from .BaseOperations import BaseOperations
 import subprocess
 import logging
 from .QuayAPI import QuayAPI
+from random import SystemRandom as Random
 
 class ImageMover(BaseOperations):
 
@@ -86,7 +87,7 @@ class QuayManagement():
             Add a proxy cache to the quay configuration.
         Args:
             source_quay_api: The Quay API object to use.
-            overwrite: Whether or not to overwrite existing proxy caches (default is False).
+            overwrite: Whether or not to overwrite existing prquay_management = QuayManagement(source_url=source_server, quay_config=quay_config)oxy caches (default is False).
         """
         for key in self.quay_config.proxycache_config:
             proxy_data = self.quay_config.proxycache_config[key]
@@ -105,7 +106,7 @@ class QuayManagement():
             logging.info(f"Creating the proxy cache for ---> {proxy_data['upstream_registry']} <--- in the organization ---> {proxy_data['org_name']} <---")
             source_quay_api.create_proxycache(org_name=proxy_data["org_name"], json_data=proxy_data)       
         
-    def add_robot_acct(self, robot_exists: dict = None, username: str = None):
+    def add_robot_acct(self, robot_exists: dict = None, username: str = None, quay_api_object: object = None):
         """
         Description:
             Add a new robot account to the quay configuration.
@@ -119,10 +120,11 @@ class QuayManagement():
                 robot_name = f"{username}+{robot_api.robot_acct['name']}"
             else:
                 robot_name = f"{robot_api.robot_acct['org_name']}+{robot_api.robot_acct['name']}"
-            if robot_name in robot_exists:
+            if robot_exists[robot_name]:
                 logging.info(f"The robot account {robot_name} already exists")
             else:
-                robot_api.create_robot_acct()
+                if username:
+                    robot_api.create_robot_acct()
             
     def delete_robot(self):
         """
@@ -131,7 +133,7 @@ class QuayManagement():
         """
         for key in self.quay_config.robot_config:
             robot_api = self.parse_robot_acct_info(key)
-            robot_api.delete_robot_acct()
+            QuayAPI.delete_robot_acct()
             
     def get_robot(self, username: str = None) -> dict:
         """
@@ -150,9 +152,12 @@ class QuayManagement():
                 # The quay api creates a robot account with <org>+<name> so to store the name correctly, we need to use the object returned from the API
                 existing_robot_dict[(robot_exists['name'])] = True
             else:
-                # There is no robot object returning from the API so 
-                if username is not None:
-                    robot_name = f"{username}+{robot_api.robot_acct['name']}"
+                if robot_api.robot_acct['type'] == 'org':
+                    robot_name = f"{robot_api.robot_acct['org_name']}+{robot_api.robot_acct['name']}"
+                elif robot_api.robot_acct['type'] == 'personal':
+                    # There is no robot object returning from the API so 
+                    if username is not None:
+                        robot_name = f"{username}+{robot_api.robot_acct['name']}"
                 else:
                     robot_name = robot_api.robot_acct['name']
                 existing_robot_dict[robot_name] = False
@@ -168,3 +173,5 @@ class QuayManagement():
             A dictionary containing information about the robot account.
         """
         return QuayAPI(base_url=self.source_url, api_token=self.quay_config.source_token, robot_acct=self.quay_config.robot_config[key])
+
+    

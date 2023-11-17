@@ -2,9 +2,13 @@ import yaml
 import logging
 import os
 import tempfile
-
+from random import SystemRandom as Random
+import bcrypt
+import string
+from uuid import uuid4;
+        
 class BaseOperations:
-    def __init__(self, config_file):
+    def __init__(self, config_file, args: dict = None):
         self.config = BaseOperations.load_config(config_file=config_file)
         expected_config_values = {
                         "destination_quay_user": {"type": "string", "desc": "Username for target quay instance" },
@@ -25,6 +29,7 @@ class BaseOperations:
                         "source_quay_password": {"type": "string", "desc": "Password for source quay"},
                         "source_quay_user": {"type": "string", "desc": "Username for source quay"},
                         "quay_init_config": {"type": "string", "desc": "Full path to the Quay settings of the init-config-bundle-secret"},
+                        "quay_admin_org": {"type": "string", "desc": "The name of the organization where the initial OAUTH token will reside"},
                             }
         try:
             self.destination_quay_user = self.config["destination_quay_user"]
@@ -41,6 +46,8 @@ class BaseOperations:
             self.proxycache_config = self.config["proxycache"]
             self.source_server = self.config["source_server"]
             self.source_token = self.config["source_token"]
+            self.source_quay_user = self.config["source_quay_user"]
+            self.source_quay_password = self.config["source_quay_password"]
             try:
                 self.quay_init_config = self.config['quay_init_config']
             except:
@@ -48,6 +55,14 @@ class BaseOperations:
             
             try:
                 self.openshift_api = self.config['openshift_api_url']
+            except:
+                pass
+            try: 
+                self.quay_admin_org = self.config['quay_admin_org']
+            except:
+                pass
+            try:
+                self.init_token = self.config['init_token']
             except:
                 pass
         except:
@@ -131,3 +146,111 @@ class BaseOperations:
             write_file.write(filedata)
         write_file.close()
         return(new_machineset_file.name)
+
+    @staticmethod
+    def create_initial_oauth_script(user_id: str = None, app_id: str = None, db_info: dict = None) -> str:
+        """
+        Description:
+            Creates a small script that makes some database inserts to manually create an oauth token. 
+            This is a workaround because Quay does not allow you to programmatically create an oauth 
+            token without first having an oauth token.
+        Args:
+            user_id (str, optional): _description_. Defaults to None.
+            app_id (str, optional): _description_. Defaults to None.
+            org_id (int, optional): _description_. Defaults to None.
+        Returns:
+            The path to the file that was written
+        """
+        local_file_location = "/tmp/generic.py"
+        random = Random()
+        token = ''.join([random.choice(string.ascii_uppercase + string.digits) for _ in range(40)])
+        bcrypt_token = bcrypt.hashpw(token[20:].encode("utf-8"), bcrypt.gensalt())
+        short_token = token[:20]
+        db_command = f"""INSERT INTO public.oauthaccesstoken " + 
+"(uuid, application_id, authorized_user_id, scope, token_type, expires_at, data, token_code, token_name) " +
+f"VALUES ('{str(uuid4())}', {app_id}, {user_id}, 'super:user org:admin user:admin user:read repo:create repo:admin repo:write repo:read', " +
+f"'Bearer', '2033-12-15 00:00:00.0', '', '{bcrypt_token.decode()}', '{short_token}') RETURNING public.oauthaccesstoken.id;"""
+        connection_string = f"dbname='{db_info['database-name']}' user='{db_info['database-username']}' host='{db_info['database-svc']}' password='{db_info['database-password']}'"
+
+        python_script = """#!/usr/bin/python
+import psycopg2;
+conn = psycopg2.connect(\"%s\") ;
+cur = conn.cursor();
+cur.execute(\"%s\");
+print(cur.fetchall())
+conn.commit()
+cur.close()
+""" % (connection_string, db_command)
+        with open(local_file_location, "w") as f:
+            f.write(python_script)
+            f.close()
+        return(local_file_location, token)
+    
+    @staticmethod
+    def create_db_info_script(select_statement: str = None, db_info: dict = None) -> str:
+        """
+        Description:
+            Creates a script that retrieves oauthapplication and oauthaccesstoken tables from the Quay database
+        Args:
+            select_statement (str, optional): A SELECT statement for sql getting all entries for a give table. Defaults to None.
+            db_info (dict, optional): This is the processed output from the openshift secret that has database connection info. Defaults to None.
+        Returns:
+            Full path to the script to transfer
+        """
+        local_file_location = "/tmp/generic.py"
+        connection_string = f"dbname='{db_info['database-name']}' user='{db_info['database-username']}' host='{db_info['database-svc']}' password='{db_info['database-password']}'"
+        if "oauthapplication" in select_statement:
+            while_loop = """
+while counter < list_length:
+    id = list(output[counter])[0]
+    client_id = list(output[counter])[1]
+    org_id = list(output[counter])[4]
+    name = list(output[counter])[5]
+    app_info_dict[id] = {'client_id': client_id, 'org_id': org_id, "oauth_name": name}
+    counter +=1
+"""
+        elif "oauthaccesstoken" in select_statement:
+            while_loop = """
+while counter < list_length:
+    database_id = list(output[counter])[0]
+    uuid = list(output[counter])[1]
+    app_id = list(output[counter])[2]
+    user_id = list(output[counter])[3]
+    app_info_dict[database_id] = {'uuid': uuid, 'app_id': app_id, 'user_id': user_id}
+    counter +=1
+"""
+        else:
+            pass
+        python_script = """#!/usr/bin/python
+import psycopg2;
+conn = psycopg2.connect(\"%s\") ;
+cur = conn.cursor();
+cur.execute(\"%s\");
+counter = 0
+app_info_dict = {}
+output = cur.fetchall()
+list_length = len(output)
+%s
+print(app_info_dict)
+""" % (connection_string, select_statement, while_loop)
+        with open(local_file_location, "w") as f:
+            f.write(python_script)
+            f.close()
+        return(local_file_location)
+    
+    @staticmethod
+    def add_to_config(config_path: str = None, insert_dict: dict = None):
+        logging.info(f"Reading {config_path}...")
+        with open(config_path, "r") as file:
+            yaml_dict = file.read()
+        yaml_dict = yaml.load(yaml_dict, Loader=yaml.FullLoader)
+        if not isinstance(insert_dict, dict):
+            logging.error(f"Cannot add {insert_dict} to config file. It is not a dict")
+            exit(1)   
+        for key in insert_dict:
+            yaml_dict[key] = insert_dict[key]
+        file.close()
+        logging.info(f"Writing new contents to {config_path}")
+        with open(config_path, "w") as file:
+            file.write(yaml.dump(yaml_dict))
+            file.close()

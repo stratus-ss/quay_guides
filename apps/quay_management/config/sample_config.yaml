@@ -1,39 +1,39 @@
-source_server: central-quay.apps.ocp4.example.com
-source_token: vJ7L8SMEpy7wpTyYYx0ZjQwn0f07cYHs0hJGyA7u
-source_quayuser: "quayadmin"
-source_quaypassword: "password"
-destination_server: central-quay.apps.quay-rep.example.com
+destination_quay_email: admin@example.com
+destination_quay_password: password
+destination_quay_user: quayadmin
+destination_server: https://central-quay.apps.ocp4.example.com
 destination_token: fxb0cpzW52Tskww7Mf2vw0GRwJFYloy8ACz9kJS7\
-destination_quay_user: "quayadmin"
-destination_quay_password: "password"
-destination_quay_email: "admin@example.com"
 failover: false
+init_token: RAHW7C2MEJJT87IXIQCB7EP08OGU1A8IM6HADAP4
+openshift_api_url: https://api.ocp4.example.com:6443
+openshift_password: <passwd>
+openshift_username: <user>
+openshift_yaml_dir: /home/ocp/misc_artifacts/quay/quay_only_manifests/
+proxycache:
+  org1:
+    org_name: admin_org
+    upstream_registry: quay.io
+    upstream_registry_password: password
+    upstream_registry_username: user
+  org2:
+    org_name: proxytest
+    upstream_registry: docker.com
+quay_admin_org: admin_org
+quay_init_config: /home/ocp/misc_artifacts/quay/quay-config-truenas-initial.yaml
 repositories:
 - org1/hello-podman:v2.0
 - org2/hello-podman:latest
 - org1/hello-podman1:v1.0
 - org3/hello-podman2:v2.0
-proxycache:
-  org1: 
-    org_name: "myorg"
-    upstream_registry_username: "user"
-    upstream_registry_password: "password"
-    upstream_registry: "quay.io"
-  org2: 
-    org_name: "proxytest"
-    upstream_registry: "docker.com"
- 
 robot_config:
   bot1:
-    type: "personal"
-    name: "test"
+    name: test
+    type: personal
   bot2:
-    type: "org"
-    org_name: "proxytest"
-    name: "test"
-
-quay_init_config: /home/ocp/git_projects/quay_guides/apps/quay_management/config/quay_init.ini
-openshift_api_url: "https://api.quay-rep.example.com:6443"
-openshift_username: "stratus"
-openshift_password: 'pelle'
-openshift_yaml_dir: '/home/ocp/misc_artifacts/quay/odf_quay_manifests/'
+    name: test
+    org_name: admin_org
+    type: org
+source_quay_password: password
+source_quay_user: quayadmin
+source_server: https://central-quay.apps.ocp4.example.com
+source_token: 3MITPRDDTSA385B1WZ8TAYQFQ9MIOZUNRKIW1XIH

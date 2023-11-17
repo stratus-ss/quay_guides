@@ -11,8 +11,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            //"args": [ "--username=quayadmin", "--password=password", "--add-robot-account", "--config-file=/home/ocp/git_projects/quay_guides/apps/quay_sync/sample_config.yaml", "--skip-tls-verify", "--skip-broken-images", "--auto-discovery"]
-            "args": [ "--setup-quay-openshift", "--config-file=/home/ocp/git_projects/quay_guides/apps/quay_management/config/sample_config.yaml", "--skip-tls-verify"]
+            "args": [ "--config-file=/home/ocp/git_projects/quay_guides/apps/quay_management/config/sample_config.yaml", "--skip-tls-verify", "--add-admin-org", "--add-robot-account", "--add-proxycache", "--overwrite-proxycache", "--initialize-user", "--initialize-oauth"]
         }
     ]
 }
