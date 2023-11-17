@@ -110,6 +110,15 @@ data:
       operator: Equal
       value: "true"
       effect: NoSchedule
+  CSI_PROVISIONER_TOLERATIONS: |
+    - effect: NoSchedule
+      key: node-role.kubernetes.io/infra
+      operator: Exists
+    - key: node.ocs.openshift.io/storage
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+
 '
 ```
 At this point the ODF cluster should be ready to serve storage to the cluster.
