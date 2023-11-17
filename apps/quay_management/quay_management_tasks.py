@@ -126,7 +126,7 @@ if __name__ == "__main__":
         with open("/tmp/initial_user", "w") as f:
             f.write(initial_user_response.content.decode())
             f.close()
-        new_config_line['init_token'] = api_token=access_token['access_token']
+        new_config_line['init_token'] = access_token['access_token']
         quay_config.add_to_config(args.config_file, new_config_line)
         # reread the config file
         quay_config = BaseOperations(args.config_file)
