@@ -12,6 +12,18 @@ class BaseOperations:
         self.config = BaseOperations.load_config(config_file=config_file)
         expected_config_values = {}
         def build_dict(add_these_options: list[dict[str, str]] = None, incoming_dict: dict = None) -> dict:
+            """
+            Description:
+                Creates or updates a dict to keep a running list of the required options depending on
+                which args are passed into the script
+            Args:
+                add_these_options (list[dict[str, str]], optional): This is a list of dicts. It is expected to 
+                        be nested. {"key": {"type": "value", "desc": "value"}} Defaults to None.
+                incoming_dict (dict, optional): Either an empty or a pre-populated dict in the format as above. Defaults to None.
+
+            Returns:
+                dict: A dict with the name of the config option, a type and a description
+            """
             if incoming_dict is None:
                 incoming_dict = {}
             for item in add_these_options:
@@ -65,6 +77,10 @@ class BaseOperations:
         #################
 
         if args:                
+            # If the arg parser arguments have been passed in we are going to try and map the passed in arguments
+            # to their required config.yaml entries.
+            # The first line in each try, just checks to see if the value is defined
+            # if it is, and it's set to true, then set the required options
             try:
                 # if auto_discovery is either true or false, assume we are doing a quay sync
                 # This argument is not present in the quay_management_tasks.py so this should
@@ -137,13 +153,16 @@ class BaseOperations:
             except:
                 pass
         
+        # Catch all of the errors as a list of keys
         errors = []
         for options in expected_config_values:
             try:
+                # Attempt to creaate self.{key} names as variables on the class
                 setattr(self, options, self.config[options])
             except Exception as e:
                 errors.append(e.args[0])
-
+        # If there are errors, loop over any keys that we could not parse and print their
+        # options to the screen
         if errors:
             errors.sort()
             for key in errors:
