@@ -30,7 +30,7 @@ if __name__ == "__main__":
                 add_key(v, key)
             else:
                 v[key] = None
-    quay_config = BaseOperations(args.config_file)
+    quay_config = BaseOperations(args.config_file, args=args)
     mover= ImageMover(args.config_file)
     preflight = PreflightChecker()
 

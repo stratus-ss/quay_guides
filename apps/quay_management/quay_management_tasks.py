@@ -13,8 +13,6 @@ import yaml
 
 logging.basicConfig(level=logging.INFO)
 parser = argparse.ArgumentParser(description='Process some integers.')
-parser.add_argument('--username', help='Quay Username')
-parser.add_argument('--password', help='Quay Password')
 parser.add_argument('--config-file', help="The full path to the config file", required=True)
 parser.add_argument("--skip-tls-verify", action="store_true", help="Ignore self signed certs on registries", default=False)
 parser.add_argument("--add-proxycache", action="store_true", help="Add ProxyCache to an organization", default=False)
@@ -33,7 +31,7 @@ args = parser.parse_args()
 if __name__ == "__main__":
     logging.info(f"----> Starting at {datetime.datetime.now()}")
     start_time = time.perf_counter()
-    quay_config = BaseOperations(args.config_file)
+    quay_config = BaseOperations(args.config_file, args=args)
 
     if not quay_config.failover:
         source_server = quay_config.source_server
