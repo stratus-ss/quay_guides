@@ -89,8 +89,8 @@ class QuayManagement():
             source_quay_api: The Quay API object to use.
             overwrite: Whether or not to overwrite existing prquay_management = QuayManagement(source_url=source_server, quay_config=quay_config)oxy caches (default is False).
         """
-        for key in self.quay_config.proxycache_config:
-            proxy_data = self.quay_config.proxycache_config[key]
+        for key in self.quay_config.proxycache:
+            proxy_data = self.quay_config.proxycache[key]
             # Since there can only be a single proxycache definition per org, go through and delete the proxycache first if it exists
             proxy_info = source_quay_api.get_proxycache(org_name=proxy_data["org_name"])
             if proxy_info is not None:

@@ -24,6 +24,7 @@ parser.add_argument("--initialize-user", action="store_true", help="Create the f
 parser.add_argument("--initialize-oauth", action="store_true", help="Create the first OAUTH token for Quay")
 parser.add_argument("--add-admin-org", action="store_true", help="Create the administrative organization")
 parser.add_argument("--destination-quay-install", action="store_true", help="If this flag is set, assume that you are installing a quay mirror. The quay sync program will activate assuming this server is the destination.")
+parser.add_argument("--debug", action="store_true", help="Should debug be turned on. Files will be written to disk and not cleaned up")
 args = parser.parse_args()
 
 
@@ -116,14 +117,18 @@ if __name__ == "__main__":
                         time.sleep(700)
     
     if args.initialize_user:
+        # Do we create the first user via the one-time use API endpoint Quay has?
         new_config_line = {}
         user_info = {"username": quay_config.destination_quay_user, "password": quay_config.destination_quay_password, "email": quay_config.destination_quay_email, "access_token": "true"}
         destination_quay_api = QuayAPI(base_url=quay_config.destination_server)
         initial_user_response = destination_quay_api.create_initial_user(user_info=user_info)
         access_token = ast.literal_eval(initial_user_response.text.strip("\n"))
-        with open("/tmp/initial_user", "w") as f:
-            f.write(initial_user_response.content.decode())
-            f.close()
+        if args.debug:
+            logging.debug("Writing the initial user information to /tmp/initial_user. File contents below:")
+            logging.debug(initial_user_response.content.decode())
+            with open("/tmp/initial_user", "w") as f:
+                f.write(initial_user_response.content.decode())
+                f.close()
         new_config_line['init_token'] = access_token['access_token']
         quay_config.add_to_config(args.config_file, new_config_line)
         # reread the config file
@@ -141,69 +146,98 @@ if __name__ == "__main__":
         response = destination_quay_api.create_oauth_application(org_name=quay_config.quay_admin_org)
         print()
     if args.initialize_oauth:
+        if args.debug:
+            logging.debug(f"Attempting to login into {quay_config.openshift_api} as {quay_config.openshift_username}")
         OpenShiftCommands.openshift_login(api_url=quay_config.openshift_api, username=quay_config.openshift_username, passwd=quay_config.openshift_password)
         pod_response = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay", 
                                                                         "label": "quay-component=quay-app", 
                                                                         "object_type": "pods"}), Loader=yaml.FullLoader)
         select = "SELECT * FROM public.oauthapplication"
+        if args.debug:
+            logging.debug("Attempting get database information from the postgres-config-secret")
+            
         all_quay_secrets = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay", 
                                                                             "label": "quay-operator/quayregistry=central", 
                                                                             "object_type": "secret"}), Loader=yaml.FullLoader)
         db_secret_dict = {}
         for secret in all_quay_secrets['items']:
-            if "central-postgres-config-secret" in secret['metadata']['name']:
+            if "postgres-config-secret" in secret['metadata']['name']:
                 db_secret_dict = secret
         db_info = OpenShiftCommands.openshift_process_secret(secret=db_secret_dict)
         quay_db_service = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay", 
                                                                             "label": "quay-component=postgres", 
                                                                             "object_type": "svc"}), Loader=yaml.FullLoader)['items'][0]['metadata']['name']
         db_info['database-svc'] = quay_db_service
+        if args.debug:
+            logging.debug(f"The database secret is:")
+            logging.debug(db_info)
         oauthapplication_script_location = quay_config.create_db_info_script(select_statement=select, db_info=db_info)
         OpenShiftCommands.openshift_transfer_file(filename=oauthapplication_script_location,  
                                                 pod_name=pod_response['items'][0]['metadata']['name'], 
                                                 namespace="quay")
-        oauthapplication_output = ast.literal_eval(OpenShiftCommands.openshift_exec_pod(pod_name=pod_response['items'][0]['metadata']['name'], 
+        oauthapplication_select_output = ast.literal_eval(OpenShiftCommands.openshift_exec_pod(pod_name=pod_response['items'][0]['metadata']['name'], 
                                                                                         namespace="quay",
                                                                                         command=["/usr/bin/python", "/tmp/generic.py"]).decode().strip("\n").strip("\r"))
-
+        if args.debug:
+            logging.debug("Retrieving current records from public.oauthapplication")
+            logging.debug(f"Running /tmp/generic.py in the {pod_response['items'][0]['metadata']['name']} pod")
 
         select = "SELECT * FROM public.oauthaccesstoken"
         oauthaccesstoken_script_location = quay_config.create_db_info_script(select_statement=select, db_info=db_info)
         OpenShiftCommands.openshift_transfer_file(filename=oauthaccesstoken_script_location, 
                                                 pod_name=pod_response['items'][0]['metadata']['name'], 
                                                 namespace="quay")
-        oauthaccesstoken_output = ast.literal_eval(OpenShiftCommands.openshift_exec_pod(pod_name=pod_response['items'][0]['metadata']['name'], 
+        oauthaccesstoken_select_output = ast.literal_eval(OpenShiftCommands.openshift_exec_pod(pod_name=pod_response['items'][0]['metadata']['name'], 
                                                                                         namespace="quay",
                                                                                         command=["/usr/bin/python", "/tmp/generic.py"]).decode().strip("\n").strip("\r"))
-
+        if args.debug:
+            logging.debug("Retrieving current records from public.oauthaccesstoken")
+            logging.debug(f"Running /tmp/generic.py in the {pod_response['items'][0]['metadata']['name']} pod")
         oauth_app_database_id = ""
         oauth_app_org_id = ""
         oauth_access_uid = ""
         oauth_access_app_id = ""
-        for key in oauthapplication_output:
-            if oauthapplication_output[key]['oauth_name'] == "automation":
+        for key in oauthapplication_select_output:
+            if oauthapplication_select_output[key]['oauth_name'] == "automation":
+                if args.debug:
+                    logging.debug("Found the 'automation' OAUTH application")
+                    logging.debug("This is being used to type the OAUTH key to")
+                    logging.debug(oauthapplication_select_output[key])
                 oauth_app_database_id = key
-                oauth_app_org_id = oauthapplication_output[key]['org_id']
+                oauth_app_org_id = oauthapplication_select_output[key]['org_id']
 
-        for key in oauthaccesstoken_output:
-            if oauthaccesstoken_output[key]['app_id'] == oauth_app_database_id:
-                oauth_access_uid = oauthaccesstoken_output[key]['user_id']
-                oauth_access_app_id = oauthaccesstoken_output[key]['app_id']
+        for key in oauthaccesstoken_select_output:
+            if oauthaccesstoken_select_output[key]['app_id'] == oauth_app_database_id:
+                if args.debug:
+                    logging.debug("Found the oauth database records")
+                    logging.debug(oauthaccesstoken_select_output[key])
+                oauth_access_uid = oauthaccesstoken_select_output[key]['user_id']
+                oauth_access_app_id = oauthaccesstoken_select_output[key]['app_id']
 
         initialize_oauth_script, oauth_token = quay_config.create_initial_oauth_script(user_id=oauth_access_uid, 
                                             app_id=oauth_access_app_id, 
                                             db_info=db_info)
+        if args.debug:
+            logging.debug(f"Attempting to transfer {initialize_oauth_script} to {pod_response['items'][0]['metadata']['name']}")
         OpenShiftCommands.openshift_transfer_file(filename=initialize_oauth_script, 
                                                 pod_name=pod_response['items'][0]['metadata']['name'], 
                                                 namespace="quay")
-        oauthaccesstoken_output = ast.literal_eval(OpenShiftCommands.openshift_exec_pod(pod_name=pod_response['items'][0]['metadata']['name'], 
+        oauthaccesstoken_db_output = ast.literal_eval(OpenShiftCommands.openshift_exec_pod(pod_name=pod_response['items'][0]['metadata']['name'], 
                                                                                         namespace="quay",
                                                                                         command=["/usr/bin/python", "/tmp/generic.py"]).decode().strip("\n").strip("\r"))
-        
+        if args.debug: 
+            logging.debug(f"Database activities respose: {oauthaccesstoken_db_output}")
+            logging.debug(f"The generated token is: {oauth_token}")
+        if not args.debug:
+            OpenShiftCommands.openshift_exec_pod(pod_name=pod_response['items'][0]['metadata']['name'], 
+                                                                                        namespace="quay",
+                                                                                        command=["/usr/bin/rm", "/tmp/generic.py"])
         if args.destination_quay_install:
             new_line = {"destination_token": oauth_token}
         else:
             new_line = {"source_token": oauth_token}
+        if args.debug:
+            logging.debug("Rereading the config files and regenerating API sessions with new token...")
         quay_config.add_to_config(config_path=args.config_file, insert_dict=new_line)
         # reread the config file because it should have new information in it
         quay_config = BaseOperations(args.config_file)
