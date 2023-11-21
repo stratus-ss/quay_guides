@@ -11,7 +11,6 @@ import datetime
 import ast
 import yaml
 
-logging.basicConfig(level=logging.INFO)
 parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument('--config-file', help="The full path to the config file", required=True)
 parser.add_argument("--skip-tls-verify", action="store_true", help="Ignore self signed certs on registries", default=False)
@@ -26,6 +25,11 @@ parser.add_argument("--add-admin-org", action="store_true", help="Create the adm
 parser.add_argument("--destination-quay-install", action="store_true", help="If this flag is set, assume that you are installing a quay mirror. The quay sync program will activate assuming this server is the destination.")
 parser.add_argument("--debug", action="store_true", help="Should debug be turned on. Files will be written to disk and not cleaned up")
 args = parser.parse_args()
+
+if args.debug:
+    logging.basicConfig(level=logging.DEBUG)
+else:
+    logging.basicConfig(level=logging.INFO)
 
 
 
@@ -51,8 +55,6 @@ if __name__ == "__main__":
         action_this_cluster = destination_quay_api
     else:
         action_this_cluster = source_quay_api
-
-    user_info = {"username": quay_config.destination_quay_user, "password": quay_config.destination_quay_password, "email": quay_config.destination_quay_email, "access_token": "true"}
            
     # {"org_name": <name>, "upstream_registry": <url>, "upstream_registry_password": <password>, "upstream_registry_username": <user>}
     
@@ -60,7 +62,7 @@ if __name__ == "__main__":
     
     if args.setup_quay_openshift:
         if quay_config.quay_init_config:
-            OpenShiftCommands.openshift_login(api_url=quay_config.openshift_api, username=quay_config.openshift_username, passwd=quay_config.openshift_password)
+            OpenShiftCommands.openshift_login(api_url=quay_config.openshift_api_url, username=quay_config.openshift_username, passwd=quay_config.openshift_password)
             yaml_list = BaseOperations.yaml_file_list(quay_config.openshift_yaml_dir)
             for yaml_file in yaml_list:
                 delay = False
@@ -119,7 +121,7 @@ if __name__ == "__main__":
     if args.initialize_user:
         # Do we create the first user via the one-time use API endpoint Quay has?
         new_config_line = {}
-        user_info = {"username": quay_config.destination_quay_user, "password": quay_config.destination_quay_password, "email": quay_config.destination_quay_email, "access_token": "true"}
+        user_info = {"username": quay_config.initialize_username, "password": quay_config.initialize_password, "email": quay_config.initialize_email, "access_token": "true"}
         destination_quay_api = QuayAPI(base_url=quay_config.destination_server)
         initial_user_response = destination_quay_api.create_initial_user(user_info=user_info)
         access_token = ast.literal_eval(initial_user_response.text.strip("\n"))
@@ -132,7 +134,7 @@ if __name__ == "__main__":
         new_config_line['init_token'] = access_token['access_token']
         quay_config.add_to_config(args.config_file, new_config_line)
         # reread the config file
-        quay_config = BaseOperations(args.config_file)
+        quay_config = BaseOperations(args.config_file, args=args)
 
     if args.add_admin_org:
         if args.initialize_user:
@@ -147,8 +149,8 @@ if __name__ == "__main__":
         print()
     if args.initialize_oauth:
         if args.debug:
-            logging.debug(f"Attempting to login into {quay_config.openshift_api} as {quay_config.openshift_username}")
-        OpenShiftCommands.openshift_login(api_url=quay_config.openshift_api, username=quay_config.openshift_username, passwd=quay_config.openshift_password)
+            logging.debug(f"Attempting to login into {quay_config.openshift_api_url} as {quay_config.openshift_username}")
+        OpenShiftCommands.openshift_login(api_url=quay_config.openshift_api_url, username=quay_config.openshift_username, passwd=quay_config.openshift_password)
         pod_response = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay", 
                                                                         "label": "quay-component=quay-app", 
                                                                         "object_type": "pods"}), Loader=yaml.FullLoader)
@@ -240,7 +242,7 @@ if __name__ == "__main__":
             logging.debug("Rereading the config files and regenerating API sessions with new token...")
         quay_config.add_to_config(config_path=args.config_file, insert_dict=new_line)
         # reread the config file because it should have new information in it
-        quay_config = BaseOperations(args.config_file)
+        quay_config = BaseOperations(args.config_file, args=args)
         # regenerate api session
         if args.destination_quay_install:
             action_this_cluster = QuayAPI(base_url=destination_server, api_token=quay_config.destination_token)

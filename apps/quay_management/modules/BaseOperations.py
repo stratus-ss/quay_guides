@@ -148,7 +148,7 @@ class BaseOperations:
                 pass
             try:
                 args.initialize_oauth
-                if args.inialiaze_oauth:
+                if args.initialize_oauth:
                     add_these_options = [openshift_options.copy()]
                     add_these_options.append({"quay_admin_org": all_options["quay_admin_org"]})
                     expected_config_values = build_dict(add_these_options=add_these_options, incoming_dict=expected_config_values)
