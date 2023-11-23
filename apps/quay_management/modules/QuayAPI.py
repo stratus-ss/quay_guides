@@ -154,7 +154,8 @@ class QuayAPI:
         else:
             headers = self.headers
         logging.info(f"Attempting to create organization: {org_name}")
-        response = requests.post(f'{self.base_url}{self.org_endpoint}', headers=headers, json=data)
+        url = f'{self.base_url}{self.org_endpoint}'
+        response = self.post_data(url=url, headers=headers, data=data)
         if response.status_code == 201:
             logging.info(f"Organization created successfully: {org_name}")
             return
@@ -177,16 +178,43 @@ class QuayAPI:
         response = self.post_data(url=self.initialize_url, data=user_info, headers_required=False)
         return response
 
+    def delete_org(self, org_name: str = None, override_headers: bool = False, additional_api_key: str = None):
+        """
+        Description: 
+            Deletes an organization on Quay.
+        Args:
+            org_name (str): The name of the organization to delete.
+        Returns:
+            bool: True if the organization was deleted successfully, False otherwise.
+        """
+        data = {
+            'name': org_name
+        }
+        if override_headers:
+            headers = {'Authorization': f'Bearer {additional_api_key}'}
+        else:
+            headers = self.headers
+        logging.info(f"Attempting to delete organization: {org_name}")
+        url = f'{self.base_url}{self.org_endpoint}'
+        response = self.delete_data(data=data, url=url, headers=headers)
+        if response.status_code == 201:
+            logging.info(f"Organization deleted successfully: {org_name}")
+            return
+        else:
+            logging.critical("Error delete organization")
+            logging.debug(response.text)
+            return False
+
+
     def delete_robot_acct(self):
         """
         Description:
             Deletes a robot account if it exists
         """
-        data = {}
         logging.info(f"Deleting robot account {self.robot_acct['name']}")
         self.delete_data(url=self.robot_url)
 
-    def delete_data(self, data: dict = None, url: str = None, headers_required=True) -> dict:
+    def delete_data(self, data: dict = None, url: str = None, headers_required=True, headers: str = None) -> dict:
         """
         Description:
             Deletes data from a specified URL using the requests library.
@@ -197,8 +225,10 @@ class QuayAPI:
         Returns:
             dict: The response from the server.
         """
+        if not headers:
+            headers = self.headers
         if headers_required:
-            return(requests.delete(f'{url}', headers=self.headers, json=data))
+            return(requests.delete(f'{url}', headers=headers, json=data))
         else:
             return(requests.delete(f'{url}', json=data))
 
@@ -312,7 +342,7 @@ class QuayAPI:
         logging.info(f"Retrieving robot account {self.robot_acct['name']}")
         return(response)
 
-    def post_data(self, data: dict, url: str = None, headers_required=True ) -> dict:
+    def post_data(self, data: dict = None, url: str = None, headers_required=True, headers: str = None ) -> dict:
         """
         Description: 
             Posts data to a specified URL using the requests library.
@@ -323,10 +353,15 @@ class QuayAPI:
         Returns:
             dict: The response from the server.
         """
+        if not data:
+            data = {}
+        if not headers:
+            headers = self.headers
         if headers_required:
-            return(requests.post(f'{url}', headers=self.headers, json=data))
+            output = requests.post(f'{url}', headers=headers, json=data)
         else:
-             return(requests.post(f'{url}', json=data))
+            output = requests.post(f'{url}', json=data)
+        return(output)
  
     def put_data(self, data: dict = None, url: str = None, headers_required=True ) -> dict:
         """

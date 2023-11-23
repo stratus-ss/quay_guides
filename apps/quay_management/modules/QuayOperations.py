@@ -70,41 +70,41 @@ class ImageMover(BaseOperations):
                 exit(1)
 
 class QuayManagement():
-    def __init__(self, source_url: str = None, quay_config: dict = None) -> None:
+    def __init__(self, quay_url: str = None, quay_config: dict = None) -> None:
         """
         Description:
             Initialize a QuayManagement object.
         Args:
-            source_url: The URL of the Quay API to use.
+            quay_url: The URL of the Quay API to use.
             quay_config: A dictionary containing configuration information for the Quay API.
         """
-        self.source_url = source_url
+        self.quay_url = quay_url
         self.quay_config = quay_config
  
-    def add_proxycache(self, source_quay_api: QuayAPI, overwrite: bool = False):
+    def add_proxycache(self, quay_api: QuayAPI, overwrite: bool = False):
         """
         Descirption:
             Add a proxy cache to the quay configuration.
         Args:
             source_quay_api: The Quay API object to use.
-            overwrite: Whether or not to overwrite existing prquay_management = QuayManagement(source_url=source_server, quay_config=quay_config)oxy caches (default is False).
+            overwrite: Whether or not to overwrite existing proxy caches (default is False).
         """
         for key in self.quay_config.proxycache:
             proxy_data = self.quay_config.proxycache[key]
             # Since there can only be a single proxycache definition per org, go through and delete the proxycache first if it exists
-            proxy_info = source_quay_api.get_proxycache(org_name=proxy_data["org_name"])
+            proxy_info = quay_api.get_proxycache(org_name=proxy_data["org_name"])
             if proxy_info is not None:
                 if overwrite:
                     logging.info(f" existing proxycache found in the organization ----> {proxy_data['org_name']} <----")
                     logging.info(f" --overwrite-proxycache option found... deleting existing proxycache config for ----> {proxy_info['upstream_registry']} <----")
-                    source_quay_api.delete_proxycache(org_name=proxy_data["org_name"])
+                    quay_api.delete_proxycache(org_name=proxy_data["org_name"])
                 else:
                     logging.warning("Proxy cache already exists and --overwrite-proxycache was not used")
                     logging.warning("NOT deleting existing proxycache")
                     break
             
             logging.info(f"Creating the proxy cache for ---> {proxy_data['upstream_registry']} <--- in the organization ---> {proxy_data['org_name']} <---")
-            source_quay_api.create_proxycache(org_name=proxy_data["org_name"], json_data=proxy_data)       
+            quay_api.create_proxycache(org_name=proxy_data["org_name"], json_data=proxy_data)       
         
     def add_robot_acct(self, robot_exists: dict = None, username: str = None, quay_api_object: object = None):
         """
@@ -115,7 +115,7 @@ class QuayManagement():
             username: The username of the robot to add.
         """
         for key in self.quay_config.robot_config:
-            robot_api = self.parse_robot_acct_info(key)
+            robot_api = self.parse_robot_acct_info(key, api_token=quay_api_object.api_token)
             if robot_api.robot_acct['type'] == 'personal':
                 robot_name = f"{username}+{robot_api.robot_acct['name']}"
             else:
@@ -163,7 +163,7 @@ class QuayManagement():
                 existing_robot_dict[robot_name] = False
         return(existing_robot_dict)
             
-    def parse_robot_acct_info(self, key: str) -> dict:
+    def parse_robot_acct_info(self, key: str, api_token: str = None) -> dict:
         """
         Description:
             Parse robot account information for a given key in the quay_config dictionary.
@@ -172,6 +172,6 @@ class QuayManagement():
         Returns:
             A dictionary containing information about the robot account.
         """
-        return QuayAPI(base_url=self.source_url, api_token=self.quay_config.source_token, robot_acct=self.quay_config.robot_config[key])
+        return QuayAPI(base_url=self.quay_url, api_token=api_token, robot_acct=self.quay_config.robot_config[key])
 
     

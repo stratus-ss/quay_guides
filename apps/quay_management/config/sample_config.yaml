@@ -1,17 +1,23 @@
-destination_quay_email: admin@example.com
-destination_quay_password: password
-destination_quay_user: quayadmin
-destination_server: https://central-quay.apps.ocp4.x86experts.com
-destination_token: fxb0cpzW52Tskww7Mf2vw0GRwJFYloy8ACz9kJS7\
 failover: false
-init_token: 52G39K0K312534NXRJS5F8BD4OUF8T12SQPDW3AC
+init_token: CN25LNOPO46HI22UGCNOLT27W8LZJMRAVD3Q9IC4
 initialize_email: admin@example.com
 initialize_password: password
 initialize_username: quayadmin
 openshift_api_url: https://api.ocp4.example.com:6443
-openshift_password: pelle
-openshift_username: stratus
+openshift_password: password
+openshift_username: admin
 openshift_yaml_dir: /home/ocp/misc_artifacts/quay/quay_only_manifests/
+organizations:
+  ensono:
+    present: true
+  proxytest:
+    present: true
+  test:
+    present: false
+primary_quay_password: password
+primary_quay_user: quayadmin
+primary_server: https://central-quay.apps.ocp4.example.com
+primary_token: TOOSYDTROY6JEQYLJT2YYV1055KEMEW9RZ1TYRXS
 proxycache:
   org1:
     org_name: admin_org
@@ -36,7 +42,8 @@ robot_config:
     name: test
     org_name: admin_org
     type: org
-source_quay_password: password
-source_quay_user: quayadmin
-source_server: https://central-quay.apps.ocp4.x86experts.com
-source_token: BCXSJZT6K06N2XNVUY031P3H39F538ZVAK7L4LOE
+secondary_quay_email: admin@example.com
+secondary_quay_password: password
+secondary_quay_user: quayadmin
+secondary_server: https://central-quay.apps.ocp4.example.com
+secondary_token: fxb0cpzW52Tskww7Mf2vw0GRwJFYloy8ACz9kJS7\

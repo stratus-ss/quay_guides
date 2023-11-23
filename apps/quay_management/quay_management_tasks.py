@@ -12,18 +12,19 @@ import ast
 import yaml
 
 parser = argparse.ArgumentParser(description='Process some integers.')
-parser.add_argument('--config-file', help="The full path to the config file", required=True)
-parser.add_argument("--skip-tls-verify", action="store_true", help="Ignore self signed certs on registries", default=False)
+parser.add_argument("--add-admin-org", action="store_true", help="Create the administrative organization")
 parser.add_argument("--add-proxycache", action="store_true", help="Add ProxyCache to an organization", default=False)
-parser.add_argument("--overwrite-proxycache", action="store_true", help="Should any current proxycache be overridden?")
 parser.add_argument("--add-robot-account", action="store_true", help="Adds robot accounts to a personal account or an organization", default=False)
-parser.add_argument("--setup-quay-openshift", action="store_true", help="Have the management script apply OpenShift Quay configs")
-parser.add_argument("--openshift-yaml-dir", help="The full path to the YAML files to apply to the cluster. They should be prefixed with the a number associated with the order to apply them.")
+parser.add_argument('--config-file', help="The full path to the config file", required=True)
+parser.add_argument("--configure-secondary-quay-server", action="store_true", help="If this flag is set, assume that you are installing a quay mirror. The quay sync program will activate assuming this server is the secondary.")
+parser.add_argument("--debug", action="store_true", help="Should debug be turned on. Files will be written to disk and not cleaned up")
 parser.add_argument("--initialize-user", action="store_true", help="Create the first user for Quay")
 parser.add_argument("--initialize-oauth", action="store_true", help="Create the first OAUTH token for Quay")
-parser.add_argument("--add-admin-org", action="store_true", help="Create the administrative organization")
-parser.add_argument("--destination-quay-install", action="store_true", help="If this flag is set, assume that you are installing a quay mirror. The quay sync program will activate assuming this server is the destination.")
-parser.add_argument("--debug", action="store_true", help="Should debug be turned on. Files will be written to disk and not cleaned up")
+parser.add_argument("--manage-orgs", action="store_true", help="Whether or not this program should create/remove orgs in the config.yaml")
+parser.add_argument("--openshift-yaml-dir", help="The full path to the YAML files to apply to the cluster. They should be prefixed with the a number associated with the order to apply them.")
+parser.add_argument("--overwrite-proxycache", action="store_true", help="Should any current proxycache be overridden?")
+parser.add_argument("--setup-quay-openshift", action="store_true", help="Have the management script apply OpenShift Quay configs")
+parser.add_argument("--skip-tls-verify", action="store_true", help="Ignore self signed certs on registries", default=False)
 args = parser.parse_args()
 
 if args.debug:
@@ -38,27 +39,23 @@ if __name__ == "__main__":
     start_time = time.perf_counter()
     quay_config = BaseOperations(args.config_file, args=args)
 
-    if not quay_config.failover:
-        source_server = quay_config.source_server
-        destination_server = quay_config.destination_server
+    # The sync runs in a different process so we should only be taking actions on a single host
+    # Therefore we can collapse the variables and just change the inputs for clarity
+    if args.configure_secondary_quay_server:
+        quay_server = "secondary_server"
+        quay_token = "secondary_token"
+        quay_user = "secondary_quay_user"
     else:
-        source_server = quay_config.destination_server
-        destination_server = quay_config.source_server
+        quay_server = "primary_server"
+        quay_token = "primary_token"
+        quay_user = "primary_quay_user"
 
-   # Create an instance of QuayAPI for the source server
-    source_quay_api = QuayAPI(base_url=source_server, api_token=quay_config.source_token)
-
-    # Create an instance of the QuayAPI class for the destination server
-    destination_quay_api = QuayAPI(base_url=destination_server, api_token=quay_config.destination_token)
-
-    if args.destination_quay_install:
-        action_this_cluster = destination_quay_api
-    else:
-        action_this_cluster = source_quay_api
-           
-    # {"org_name": <name>, "upstream_registry": <url>, "upstream_registry_password": <password>, "upstream_registry_username": <user>}
+    quay_url = eval("quay_config.%s" % quay_server)
+    quay_username = eval("quay_config.%s" %  quay_user)
+    quay_api_token = eval("quay_config.%s" % quay_token)
+    quay_server_api = QuayAPI(base_url=quay_url, api_token=quay_api_token)    
     
-    quay_management = QuayManagement(source_url=source_server, quay_config=quay_config)
+    quay_management = QuayManagement(quay_url=quay_url, quay_config=quay_config)
     
     if args.setup_quay_openshift:
         if quay_config.quay_init_config:
@@ -122,8 +119,8 @@ if __name__ == "__main__":
         # Do we create the first user via the one-time use API endpoint Quay has?
         new_config_line = {}
         user_info = {"username": quay_config.initialize_username, "password": quay_config.initialize_password, "email": quay_config.initialize_email, "access_token": "true"}
-        destination_quay_api = QuayAPI(base_url=quay_config.destination_server)
-        initial_user_response = destination_quay_api.create_initial_user(user_info=user_info)
+        quay_server_api = QuayAPI(base_url=quay_url)
+        initial_user_response = quay_server_api.create_initial_user(user_info=user_info)
         access_token = ast.literal_eval(initial_user_response.text.strip("\n"))
         if args.debug:
             logging.debug("Writing the initial user information to /tmp/initial_user. File contents below:")
@@ -138,14 +135,10 @@ if __name__ == "__main__":
 
     if args.add_admin_org:
         if args.initialize_user:
-            api_token = quay_config.init_token
-        elif not args.destination_quay_install:
-            api_token = quay_config.source_token
-        else:
-            api_token = quay_config.destination_token
-        destination_quay_api = QuayAPI(base_url=quay_config.destination_server, api_token=api_token)
-        destination_quay_api.create_org(org_name=quay_config.quay_admin_org)
-        response = destination_quay_api.create_oauth_application(org_name=quay_config.quay_admin_org)
+            quay_api_token = quay_config.init_token
+        quay_server_api = QuayAPI(base_url=quay_url, api_token=quay_api_token)
+        quay_server_api.create_org(org_name=quay_config.quay_admin_org)
+        response = quay_server_api.create_oauth_application(org_name=quay_config.quay_admin_org)
         print()
     if args.initialize_oauth:
         if args.debug:
@@ -234,28 +227,36 @@ if __name__ == "__main__":
             OpenShiftCommands.openshift_exec_pod(pod_name=pod_response['items'][0]['metadata']['name'], 
                                                                                         namespace="quay",
                                                                                         command=["/usr/bin/rm", "/tmp/generic.py"])
-        if args.destination_quay_install:
-            new_line = {"destination_token": oauth_token}
+        if args.configure_secondary_quay_server:
+            new_line = {"secondary_token": oauth_token}
         else:
-            new_line = {"source_token": oauth_token}
+            new_line = {"primary_token": oauth_token}
         if args.debug:
             logging.debug("Rereading the config files and regenerating API sessions with new token...")
         quay_config.add_to_config(config_path=args.config_file, insert_dict=new_line)
         # reread the config file because it should have new information in it
         quay_config = BaseOperations(args.config_file, args=args)
         # regenerate api session
-        if args.destination_quay_install:
-            action_this_cluster = QuayAPI(base_url=destination_server, api_token=quay_config.destination_token)
-        else:
-            action_this_cluster = QuayAPI(base_url=source_server, api_token=quay_config.source_token)
+        action_this_cluster = QuayAPI(base_url=quay_url, api_token=quay_api_token)
         # Refresh the config in the quay_management class instantiation
-        quay_management = QuayManagement(source_url=source_server, quay_config=quay_config)
+        quay_management = QuayManagement(quay_url=quay_url, quay_config=quay_config)
+
+    if args.manage_orgs:
+        if args.initialize_user:
+            quay_api_token = quay_config.init_token
+        quay_server_api = QuayAPI(base_url=quay_config.secondary_server, api_token=quay_api_token)
+        for key in quay_config.organizations:
+            if quay_config.organizations[key]['present']:
+                quay_server_api.create_org(org_name=key)
+            else:
+                quay_server_api.delete_org(org_name=key)
+
     if args.add_proxycache:
-        quay_management.add_proxycache(source_quay_api=action_this_cluster, overwrite=args.overwrite_proxycache)
+        quay_management.add_proxycache(quay_api=action_this_cluster, overwrite=args.overwrite_proxycache)
 
     if args.add_robot_account:
-        robots_exist = quay_management.get_robot(username=quay_config.source_quay_user)
-        quay_management.add_robot_acct(robot_exists=robots_exist, username=quay_config.source_quay_user, quay_api_object=source_quay_api)
+        robots_exist = quay_management.get_robot(username=quay_username)
+        quay_management.add_robot_acct(robot_exists=robots_exist, username=quay_username, quay_api_object=quay_server_api)
     end_time = time.perf_counter()
     total_time = math.ceil((end_time - start_time)/60)
     logging.info(f"Total run time ---> {total_time} minutes <---")
