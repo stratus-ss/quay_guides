@@ -26,7 +26,7 @@ class ImageMover(BaseOperations):
                 f"-p={password}",
                 server,
             ]
-            podman_login_command = self.do_i_skip_tls(podman_login_command, skip_tls_verify=args.skip_tls_verify)
+            podman_login_command = BaseOperations.do_i_skip_tls(podman_login_command, skip_tls_verify=args.skip_tls_verify)
             subprocess.check_output(podman_login_command)
         except subprocess.CalledProcessError as e:
             logging.critical("--> Error logging in to Quay:")

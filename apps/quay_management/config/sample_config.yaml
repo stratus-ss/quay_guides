@@ -1,9 +1,8 @@
 failover: false
-init_token: CN25LNOPO46HI22UGCNOLT27W8LZJMRAVD3Q9IC4
 initialize_email: admin@example.com
 initialize_password: password
 initialize_username: quayadmin
-openshift_api_url: https://api.ocp4.example.com:6443
+openshift_api_url: https://api.quay-rep.example.com:6443
 openshift_password: password
 openshift_username: admin
 openshift_yaml_dir: /home/ocp/misc_artifacts/quay/quay_only_manifests/
@@ -14,10 +13,11 @@ organizations:
     present: true
   test:
     present: false
+primary_init_token: GCM411D4FML0MLRO14A8HHAH6JIPAD6WGQCGCNMB
 primary_quay_password: password
 primary_quay_user: quayadmin
-primary_server: https://central-quay.apps.ocp4.example.com
-primary_token: TOOSYDTROY6JEQYLJT2YYV1055KEMEW9RZ1TYRXS
+primary_server: https://central-quay.apps.quay-rep.example.com
+primary_token: VIPZTAX30LS5Y98SGU3JB4NM2NAW489IQJ03599T
 proxycache:
   org1:
     org_name: admin_org
@@ -28,12 +28,9 @@ proxycache:
     org_name: proxytest
     upstream_registry: docker.com
 quay_admin_org: admin_org
-quay_init_config: /home/ocp/misc_artifacts/quay/quay-config-truenas-initial.yaml
+quay_init_config: /home/ocp/misc_artifacts/quay/quay-config-minio-initial.yaml
 repositories:
-- org1/hello-podman:v2.0
-- org2/hello-podman:latest
-- org1/hello-podman1:v1.0
-- org3/hello-podman2:v2.0
+- ensono/alpine:v1.0
 robot_config:
   bot1:
     name: test
@@ -42,8 +39,9 @@ robot_config:
     name: test
     org_name: admin_org
     type: org
+secondary_init_token: HYSUJWJRLZU9TDYGI22PZHFI5GV7MXMAPTSXBSOS
 secondary_quay_email: admin@example.com
 secondary_quay_password: password
 secondary_quay_user: quayadmin
 secondary_server: https://central-quay.apps.ocp4.example.com
-secondary_token: fxb0cpzW52Tskww7Mf2vw0GRwJFYloy8ACz9kJS7\
+secondary_token: X2GJTLY7UDQCU9O3A846MTAHENTFV38MJW8FZSJ1

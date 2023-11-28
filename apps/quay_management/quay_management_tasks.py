@@ -41,6 +41,7 @@ if __name__ == "__main__":
 
     # The sync runs in a different process so we should only be taking actions on a single host
     # Therefore we can collapse the variables and just change the inputs for clarity
+    print(quay_config.primary_server)
     if args.configure_secondary_quay_server:
         quay_server = "secondary_server"
         quay_token = "secondary_token"
@@ -122,20 +123,24 @@ if __name__ == "__main__":
         quay_server_api = QuayAPI(base_url=quay_url)
         initial_user_response = quay_server_api.create_initial_user(user_info=user_info)
         access_token = ast.literal_eval(initial_user_response.text.strip("\n"))
+        token_name = "primary_init_token"
+        if args.configure_secondary_quay_server:
+            token_name = "secondary_init_token"
         if args.debug:
             logging.debug("Writing the initial user information to /tmp/initial_user. File contents below:")
             logging.debug(initial_user_response.content.decode())
             with open("/tmp/initial_user", "w") as f:
                 f.write(initial_user_response.content.decode())
                 f.close()
-        new_config_line['init_token'] = access_token['access_token']
+        new_config_line[token_name] = access_token['access_token']
         quay_config.add_to_config(args.config_file, new_config_line)
         # reread the config file
         quay_config = BaseOperations(args.config_file, args=args)
+        config_token_name = eval("quay_config.%s" % token_name)
 
     if args.add_admin_org:
         if args.initialize_user:
-            quay_api_token = quay_config.init_token
+            quay_api_token = config_token_name
         quay_server_api = QuayAPI(base_url=quay_url, api_token=quay_api_token)
         quay_server_api.create_org(org_name=quay_config.quay_admin_org)
         response = quay_server_api.create_oauth_application(org_name=quay_config.quay_admin_org)
@@ -170,24 +175,29 @@ if __name__ == "__main__":
         OpenShiftCommands.openshift_transfer_file(filename=oauthapplication_script_location,  
                                                 pod_name=pod_response['items'][0]['metadata']['name'], 
                                                 namespace="quay")
-        oauthapplication_select_output = ast.literal_eval(OpenShiftCommands.openshift_exec_pod(pod_name=pod_response['items'][0]['metadata']['name'], 
-                                                                                        namespace="quay",
-                                                                                        command=["/usr/bin/python", "/tmp/generic.py"]).decode().strip("\n").strip("\r"))
+        
         if args.debug:
             logging.debug("Retrieving current records from public.oauthapplication")
             logging.debug(f"Running /tmp/generic.py in the {pod_response['items'][0]['metadata']['name']} pod")
+            
+        oauthapplication_select_output = ast.literal_eval(OpenShiftCommands.openshift_exec_pod(pod_name=pod_response['items'][0]['metadata']['name'], 
+                                                                                        namespace="quay",
+                                                                                        command=["/usr/bin/python", "/tmp/generic.py"]).decode().strip("\n").strip("\r"))
+        
 
         select = "SELECT * FROM public.oauthaccesstoken"
         oauthaccesstoken_script_location = quay_config.create_db_info_script(select_statement=select, db_info=db_info)
         OpenShiftCommands.openshift_transfer_file(filename=oauthaccesstoken_script_location, 
                                                 pod_name=pod_response['items'][0]['metadata']['name'], 
                                                 namespace="quay")
-        oauthaccesstoken_select_output = ast.literal_eval(OpenShiftCommands.openshift_exec_pod(pod_name=pod_response['items'][0]['metadata']['name'], 
-                                                                                        namespace="quay",
-                                                                                        command=["/usr/bin/python", "/tmp/generic.py"]).decode().strip("\n").strip("\r"))
         if args.debug:
             logging.debug("Retrieving current records from public.oauthaccesstoken")
             logging.debug(f"Running /tmp/generic.py in the {pod_response['items'][0]['metadata']['name']} pod")
+            
+        oauthaccesstoken_select_output = ast.literal_eval(OpenShiftCommands.openshift_exec_pod(pod_name=pod_response['items'][0]['metadata']['name'], 
+                                                                                        namespace="quay",
+                                                                                        command=["/usr/bin/python", "/tmp/generic.py"]).decode().strip("\n").strip("\r"))
+        
         oauth_app_database_id = ""
         oauth_app_org_id = ""
         oauth_access_uid = ""
@@ -227,10 +237,11 @@ if __name__ == "__main__":
             OpenShiftCommands.openshift_exec_pod(pod_name=pod_response['items'][0]['metadata']['name'], 
                                                                                         namespace="quay",
                                                                                         command=["/usr/bin/rm", "/tmp/generic.py"])
+        
+        new_line = {"primary_token": oauth_token}
         if args.configure_secondary_quay_server:
             new_line = {"secondary_token": oauth_token}
-        else:
-            new_line = {"primary_token": oauth_token}
+    
         if args.debug:
             logging.debug("Rereading the config files and regenerating API sessions with new token...")
         quay_config.add_to_config(config_path=args.config_file, insert_dict=new_line)
@@ -243,8 +254,8 @@ if __name__ == "__main__":
 
     if args.manage_orgs:
         if args.initialize_user:
-            quay_api_token = quay_config.init_token
-        quay_server_api = QuayAPI(base_url=quay_config.secondary_server, api_token=quay_api_token)
+            quay_api_token = config_token_name
+        quay_server_api = QuayAPI(base_url=quay_url, api_token=quay_api_token)
         for key in quay_config.organizations:
             if quay_config.organizations[key]['present']:
                 quay_server_api.create_org(org_name=key)
@@ -252,7 +263,7 @@ if __name__ == "__main__":
                 quay_server_api.delete_org(org_name=key)
 
     if args.add_proxycache:
-        quay_management.add_proxycache(quay_api=action_this_cluster, overwrite=args.overwrite_proxycache)
+        quay_management.add_proxycache(quay_api=quay_server_api, overwrite=args.overwrite_proxycache)
 
     if args.add_robot_account:
         robots_exist = quay_management.get_robot(username=quay_username)
