@@ -307,7 +307,7 @@ class QuayAPI:
         Returns:
             list: A list of dictionaries, each representing a tag in the repository.
         """
-        working_url = f"{self.base_url}api/v1{href}/tag"
+        working_url = f"{self.base_url}/api/v1{href}/tag"
         tag_info = self.get_data(url=working_url)
         tag_list = []
         for tag in tag_info['tags']:

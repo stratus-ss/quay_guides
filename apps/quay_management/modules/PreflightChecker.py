@@ -14,7 +14,9 @@ class PreflightChecker:
         Returns:
             True if the server can be resolved, False otherwise.
         """
-
+        if "//" in server:
+            # If there is http:// or https:// we need to strip that to do dns lookups
+            server = server.split("//")[1:][0]
         try:
             ip_address = socket.gethostbyname(server)
             logging.info(f"{server} resolves to --> {ip_address} <--")
@@ -33,7 +35,9 @@ class PreflightChecker:
         Returns:
             True if the server is listening on the specified port, False otherwise.
         """
-
+        if "//" in server:
+            # If there is http:// or https:// we need to strip that to do dns lookups
+            server = server.split("//")[1:][0]
         quay_port = 443
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

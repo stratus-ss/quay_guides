@@ -14,12 +14,11 @@ from modules.QuayOperations import ImageMover
 
 logging.basicConfig(level=logging.INFO)
 parser = argparse.ArgumentParser(description='Process some integers.')
-parser.add_argument('--username', help='Quay Username')
-parser.add_argument('--password', help='Quay Password')
 parser.add_argument('--config-file', help="The full path to the config file", required=True)
 parser.add_argument("--skip-tls-verify", action="store_true", help="Ignore self signed certs on registries")
 parser.add_argument("--skip-broken-images", action="store_true", help="Don't stop because of broken image pull/push")
 parser.add_argument("--auto-discovery", action="store_true", help="Attempt to auto discover any repositories present in organizations")
+parser.add_argument("--failover", action="store_true", help="If set, the primary and secondary servers are flipped so the secondary is assumed live")
 
 args = parser.parse_args()
 
@@ -33,41 +32,44 @@ if __name__ == "__main__":
     quay_config = BaseOperations(args.config_file, args=args)
     mover= ImageMover(args.config_file)
     preflight = PreflightChecker()
-
-    if not quay_config.failover:
-        source_server = quay_config.source_server
-        destination_server = quay_config.destination_server
-    else:
-        source_server = quay_config.destination_server
-        destination_server = quay_config.source_server
-
+    primary_server = quay_config.primary_server
+    primary_credentials = {"username": quay_config.primary_quay_user, "password": quay_config.primary_quay_password}
+    secondary_server = quay_config.secondary_server
+    secondary_credentials = {"username": quay_config.secondary_quay_user, "password": quay_config.secondary_quay_password}
+    
+    # For now, use the Quay User's init token
+    primary_api_token = quay_config.primary_init_token
+    secondary_api_token = quay_config.secondary_init_token
+    if args.failover:
+        primary_server = quay_config.secondary_server
+        secondary_server = quay_config.primary_server
+        primary_credentials = {"username": quay_config.secondary_quay_user, "password": quay_config.secondary_quay_password}
+        secondary_credentials = {"username": quay_config.primary_quay_user, "password": quay_config.primary_quay_password}
+        primary_api_token = quay_config.secondary_init_token
+        secondary_api_token = quay_config.primary_init_token
+        
     try:
-        preflight.check_dns(source_server)
-        preflight.check_dns(destination_server)
-        preflight.check_port(source_server)
-        preflight.check_port(destination_server)
+        preflight.check_dns(primary_server)
+        preflight.check_dns(secondary_server)
+        preflight.check_port(primary_server)
+        preflight.check_port(secondary_server)
         print()
-        mover.login_to_quay(source_server, args.username, args.password)
-        mover.login_to_quay(destination_server, args.username, args.password)
-        print("")
+        mover.login_to_quay(server=primary_server, username=primary_credentials['username'], password=primary_credentials['password'], args=args)
+        mover.login_to_quay(server=secondary_server, username=secondary_credentials['username'], password=secondary_credentials['password'], args=args)
+        print()
     except Exception as e:
         logging.error("Error executing script: {}".format(e))
         exit(1)
 
-    # Set the base URL for the destination server
-    destination_url = "https://%s/" % destination_server
 
-    # Set the base URL for the source server
-    source_url = "https://%s/" % source_server
+    # Create an instance of QuayAPI for the primary server
+    primary_quay_api = QuayAPI(base_url=primary_server, api_token=primary_api_token)
 
-    # Create an instance of QuayAPI for the source server
-    source_quay_api = QuayAPI(base_url=source_url, api_token=quay_config.source_token)
-
-    # Create an instance of the QuayAPI class for the destination server
-    destination_quay_api = QuayAPI(base_url=destination_url, api_token=quay_config.destination_token)
+    # Create an instance of the QuayAPI class for the secondary server
+    secondary_quay_api = QuayAPI(base_url=secondary_server, api_token=secondary_api_token)
 
     # Call the functions and pass in the token as an argument
-    source_data = source_quay_api.get_data()
+    source_data = primary_quay_api.get_data()
 
     # Initialize variables
     index = 0
@@ -86,15 +88,15 @@ if __name__ == "__main__":
     # Loop through the source organizations
     for org in source_orgs:
         # Check if the organization exists on the destination server
-        destination_data = source_quay_api.get_data()
+        destination_data = primary_quay_api.get_data()
         if not destination_data:
             logging.info("Doesn't exist")
             continue
         # Check if the organization needs to be created on the destination server
-        create_org = destination_quay_api.check_if_object_exists(org_name=org)
+        create_org = secondary_quay_api.check_if_object_exists(org_name=org)
         if create_org:
             logging.info(f"Organization does not exist: {org} <---")
-            destination_quay_api.create_org(org)
+            secondary_quay_api.create_org(org)
             time.sleep(3)
     
     if args.auto_discovery:
@@ -104,7 +106,7 @@ if __name__ == "__main__":
         # Loop through the source repositories
         for repo in source_repositories:
             # Get the list of tags for each repository
-            tag_list = source_quay_api.get_tag_info(repo)
+            tag_list = primary_quay_api.get_tag_info(repo)
             # Loop through the tags and add them to the image_dict
             for tag in tag_list:
                 organization = repo.split("/")[-2]
@@ -120,25 +122,25 @@ if __name__ == "__main__":
         # Loop through the image_dict and print the podman pull commands
         for org in image_dict:
             for repo_and_tag in image_dict[org]:
-                source_image_name = source_quay_api.base_url.strip("https://")+ "/" + org + "/" + repo_and_tag
-                destination_image_name = destination_quay_api.base_url.strip("https://") + "/" + org + "/" + repo_and_tag
+                source_image_name = primary_quay_api.base_url.strip("https://")+ "/" + org + "/" + repo_and_tag
+                destination_image_name = secondary_quay_api.base_url.strip("https://") + "/" + org + "/" + repo_and_tag
                 print("")
-                ImageMover.podman_operations(operation="pull", image_source=source_image_name, image_and_tag=repo_and_tag)
-                ImageMover.podman_operations(operation="tag", image_source=source_image_name, image_destination=destination_image_name, image_and_tag=repo_and_tag)
+                ImageMover.podman_operations(operation="pull", image_source=source_image_name, image_and_tag=repo_and_tag, args=args)
+                ImageMover.podman_operations(operation="tag", image_source=source_image_name, image_destination=destination_image_name, image_and_tag=repo_and_tag, args=args)
                 time.sleep(1)
                 print("")
-                ImageMover.podman_operations(operation="push", image_source=source_image_name, image_destination=destination_image_name, image_and_tag=repo_and_tag)
+                ImageMover.podman_operations(operation="push", image_source=source_image_name, image_destination=destination_image_name, image_and_tag=repo_and_tag, args=args)
     else:
         try:
             for repository in quay_config.repositories:
-                image_source_name = source_server + "/" + repository
-                image_destination_name = destination_server + "/" + repository
+                image_source_name = primary_server + "/" + repository
+                image_destination_name = secondary_server + "/" + repository
                 print("")
-                ImageMover.podman_operations(operation="pull", image_source=image_source_name, image_and_tag=repository)
-                ImageMover.podman_operations(operation="tag", image_source=image_source_name, image_destination=image_destination_name, image_and_tag=repository)
+                ImageMover.podman_operations(operation="pull", image_source=image_source_name, image_and_tag=repository, args=args)
+                ImageMover.podman_operations(operation="tag", image_source=image_source_name, image_destination=image_destination_name, image_and_tag=repository, args=args)
                 time.sleep(1)
                 print("")
-                ImageMover.podman_operations(operation="push", image_source=image_source_name, image_destination=image_destination_name, image_and_tag=repository)
+                ImageMover.podman_operations(operation="push", image_source=image_source_name, image_destination=image_destination_name, image_and_tag=repository, args=args)
                 print("")
         except Exception as e:
             logging.error("Error executing script: {}".format(e))

@@ -46,6 +46,15 @@ class ImageMover(BaseOperations):
         Returns:
             None
         """
+        if image_source:
+            if "//" in image_source:
+                # If there is http:// or https:// we need to strip that because this is illegal for images
+                image_source = image_source.split("//")[1:][0]
+        if image_destination:
+            if "//" in image_destination:
+                # If there is http:// or https:// we need to strip that because this is illegal for images
+                image_destination = image_destination.split("//")[1:][0]
+            
         if operation == "tag":
             podman_command = ["podman", operation, image_source, image_destination]
             log_msg = f"Image tagged: {image_destination} <---"
