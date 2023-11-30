@@ -80,6 +80,10 @@ class BaseOperations:
                         "openshift_yaml_dir": {"type": "string", "desc": "Full path to the directory with YAMLs to be applied to the OpenShift cluster"},
                         "quay_init_config": {"type": "string", "desc": "Full path to the Quay settings of the init-config-bundle-secret"},
                         }
+        
+        quay_super_users = {
+                        "quay_secret_options": {"type": "list", "desc": "A list of super users that should exist in the OpenShift Secret"}
+                        }
         # End Options
         #################
 
@@ -133,6 +137,14 @@ class BaseOperations:
             except:
                 pass
             try:
+                args.add_super_user
+                if args.add_super_user:
+                    add_these_options = [openshift_options.copy()]
+                    add_these_options.append(quay_super_users)
+                    expected_config_values = build_dict(add_these_options=add_these_options, incoming_dict=expected_config_values)
+            except:
+                pass
+            try:
                 args.secondary_quay_install
                 if args.secondary_quay_install:
                     add_these_options = all_options.copy()
@@ -147,6 +159,8 @@ class BaseOperations:
                 if args.initialize_user:
                     add_these_options = [openshift_options.copy()]
                     token_name = "primary_init_token"
+                    quay_user = "primary_quay_user"
+                    quay_password = "primary_quay_password"
                     if args.configure_secondary_quay_server:
                         token_name = "secondary_init_token"
                     new_items = [{"initialize_username": all_options["initialize_username"]},

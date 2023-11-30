@@ -2,7 +2,7 @@ failover: false
 initialize_email: admin@example.com
 initialize_password: password
 initialize_username: quayadmin
-openshift_api_url: https://api.quay-rep.example.com:6443
+openshift_api_url: https://api.ocp4.example.com:6443
 openshift_password: password
 openshift_username: admin
 openshift_yaml_dir: /home/ocp/misc_artifacts/quay/quay_only_manifests/
@@ -44,4 +44,9 @@ secondary_quay_email: admin@example.com
 secondary_quay_password: password
 secondary_quay_user: quayadmin
 secondary_server: https://central-quay.apps.ocp4.example.com
-secondary_token: X2GJTLY7UDQCU9O3A846MTAHENTFV38MJW8FZSJ1
+secondary_token: LCOP36RIVD090M6JXCLNVH3SKKKC03LDP99CGEZH
+quay_secret_options:
+  super_users:
+    - test1
+    - quayadmin
+    - sovens

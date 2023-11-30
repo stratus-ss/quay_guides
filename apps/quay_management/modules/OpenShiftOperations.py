@@ -187,6 +187,28 @@ class OpenShiftCommands:
                                 object_ready[object_name] = True
         return(object_ready)
 
+    @staticmethod
+    def openshift_replace_quay_init_secret(full_path_to_file: str = None, secret_name: str = None):
+        openshift_create_secret_cmd = ["oc", "create", "secret", "generic", secret_name, f"--from-file=config.yaml={full_path_to_file}", "--dry-run=client", "-o", "yaml"]
+        new_secret_file_path = "/tmp/quay_new_secret.yaml"
+        try:
+            secret_output = subprocess.check_output(openshift_create_secret_cmd)
+        except Exception as e:
+            copy_command = ", ".join(openshift_create_secret_cmd).replace(",", "")
+            logging.error(f"Could not process {full_path_to_file} attempted to run {copy_command} but it failed")
+            logging.error(e)
+            exit(1)
+        
+        with open(new_secret_file_path, "w") as file:
+            file.write(yaml.dump(yaml.load(secret_output, Loader=yaml.FullLoader)))
+            file.close()
+        openshift_replace_secret_cmd = ["oc", "replace", "-f", new_secret_file_path, "-n", "quay"]
+        try:
+            output = (subprocess.check_output(openshift_replace_secret_cmd))
+        except:
+            logging.critical(f"Failed to use this file {openshift_replace_secret_cmd} to replace object")
+            exit(1)
+
     @staticmethod 
     def openshift_waitfor_pods(namespace: str = None, 
             openshift_object: str = "pods", 

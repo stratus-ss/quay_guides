@@ -15,6 +15,7 @@ parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument("--add-admin-org", action="store_true", help="Create the administrative organization")
 parser.add_argument("--add-proxycache", action="store_true", help="Add ProxyCache to an organization", default=False)
 parser.add_argument("--add-robot-account", action="store_true", help="Adds robot accounts to a personal account or an organization", default=False)
+parser.add_argument("--add-super-user", action="store_true", help="Whether or not to add the super user for Quay", default=False)
 parser.add_argument('--config-file', help="The full path to the config file", required=True)
 parser.add_argument("--configure-secondary-quay-server", action="store_true", help="If this flag is set, assume that you are installing a quay mirror. The quay sync program will activate assuming this server is the secondary.")
 parser.add_argument("--debug", action="store_true", help="Should debug be turned on. Files will be written to disk and not cleaned up")
@@ -38,25 +39,41 @@ if __name__ == "__main__":
     logging.info(f"----> Starting at {datetime.datetime.now()}")
     start_time = time.perf_counter()
     quay_config = BaseOperations(args.config_file, args=args)
-
-    # The sync runs in a different process so we should only be taking actions on a single host
-    # Therefore we can collapse the variables and just change the inputs for clarity
-    print(quay_config.primary_server)
-    if args.configure_secondary_quay_server:
-        quay_server = "secondary_server"
-        quay_token = "secondary_token"
-        quay_user = "secondary_quay_user"
-    else:
-        quay_server = "primary_server"
-        quay_token = "primary_token"
-        quay_user = "primary_quay_user"
-
-    quay_url = eval("quay_config.%s" % quay_server)
-    quay_username = eval("quay_config.%s" %  quay_user)
-    quay_api_token = eval("quay_config.%s" % quay_token)
-    quay_server_api = QuayAPI(base_url=quay_url, api_token=quay_api_token)    
     
-    quay_management = QuayManagement(quay_url=quay_url, quay_config=quay_config)
+    check_quay_options = True
+    
+    if args.add_super_user:
+        # There may be cases where the Quay information is not required
+        # It is likely that the config file and only one other argument are passed in 
+        # Adding super users only requires editing the secret in OpenShift assuming that you are using central auth
+        number_of_args_passed_in = 0
+        for user_args in vars(args):
+            if getattr(args, user_args):
+                # Debug options should not be counted as it doesn't influence the required options
+                if user_args == "debug":
+                    continue
+                number_of_args_passed_in +=1
+        # If there are only the config file and a single option probably can skip the quay info parsing
+        if number_of_args_passed_in <= 2:
+            check_quay_options = False
+    if check_quay_options:
+        # The sync runs in a different process so we should only be taking actions on a single host
+        # Therefore we can collapse the variables and just change the inputs for clarity
+        if args.configure_secondary_quay_server:
+            quay_server = "secondary_server"
+            quay_token = "secondary_token"
+            quay_user = "secondary_quay_user"
+        else:
+            quay_server = "primary_server"
+            quay_token = "primary_token"
+            quay_user = "primary_quay_user"
+
+        quay_url = eval("quay_config.%s" % quay_server)
+        quay_username = eval("quay_config.%s" %  quay_user)
+        quay_api_token = eval("quay_config.%s" % quay_token)
+        quay_server_api = QuayAPI(base_url=quay_url, api_token=quay_api_token)    
+        
+        quay_management = QuayManagement(quay_url=quay_url, quay_config=quay_config)
     
     if args.setup_quay_openshift:
         if quay_config.quay_init_config:
@@ -115,6 +132,21 @@ if __name__ == "__main__":
                     OpenShiftCommands.openshift_apply_file(yaml_file)
                 if delay:
                         time.sleep(700)
+    
+    if args.add_super_user:
+        quay_registry_object = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay",  
+                                                                            "object_type": "quayregistry"}), Loader=yaml.FullLoader)
+        registry_object_name = quay_registry_object['items'][0]['metadata']['name']
+        registry_object_secret = quay_registry_object['items'][0]['spec']['configBundleSecret']
+        quay_init_secret = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay", 
+                                                                                    "object_name": registry_object_secret, 
+                                                                                    "object_type": "secret"}), Loader=yaml.FullLoader)
+        quay_init_secret_decoded = QuayManagement.process_quay_secret(quay_init_secret=quay_init_secret, quay_config=quay_config, quay_secret_section="SUPER_USERS")
+        with open("/tmp/quay_init_bundle.yaml", "w" ) as file:
+            file.write(yaml.dump(quay_init_secret_decoded))
+            file.close()
+
+        output = OpenShiftCommands.openshift_replace_quay_init_secret(full_path_to_file="/tmp/quay_init_bundle.yaml", secret_name=registry_object_secret)
     
     if args.initialize_user:
         # Do we create the first user via the one-time use API endpoint Quay has?

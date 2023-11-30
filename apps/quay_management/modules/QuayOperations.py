@@ -3,6 +3,8 @@ import subprocess
 import logging
 from .QuayAPI import QuayAPI
 from random import SystemRandom as Random
+import yaml
+import base64
 
 class ImageMover(BaseOperations):
 
@@ -134,6 +136,19 @@ class QuayManagement():
             else:
                 if username:
                     robot_api.create_robot_acct()
+    
+    @staticmethod
+    def process_quay_secret(quay_init_secret: dict = None, quay_config: dict = None, quay_secret_section: str = "SUPER_USERS"):
+        quay_init_secret_decoded = yaml.load(base64.b64decode(quay_init_secret['data']['config.yaml']), Loader=yaml.FullLoader)
+        if quay_secret_section == "SUPER_USERS":
+            for user in quay_config.quay_secret_options['super_users']:
+                if user in quay_init_secret_decoded[quay_secret_section]:
+                    logging.info(f"User {user} was already in the Quay SUPER_USERS secret... skipping")
+                else:
+                    quay_init_secret_decoded[quay_secret_section].append(user)
+            return(quay_init_secret_decoded)
+           
+                
             
     def delete_robot(self):
         """
