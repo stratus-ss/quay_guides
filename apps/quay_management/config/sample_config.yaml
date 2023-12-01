@@ -14,6 +14,7 @@ organizations:
   test:
     present: false
 primary_init_token: GCM411D4FML0MLRO14A8HHAH6JIPAD6WGQCGCNMB
+primary_quay_init_config: /home/ocp/misc_artifacts/quay/quay-config-minio-initial.yaml
 primary_quay_password: password
 primary_quay_user: quayadmin
 primary_server: https://central-quay.apps.quay-rep.example.com
@@ -28,7 +29,11 @@ proxycache:
     org_name: proxytest
     upstream_registry: docker.com
 quay_admin_org: admin_org
-quay_init_config: /home/ocp/misc_artifacts/quay/quay-config-minio-initial.yaml
+quay_secret_options:
+  super_users:
+  - test1
+  - quayadmin
+  - sovens
 repositories:
 - ensono/alpine:v1.0
 robot_config:
@@ -39,14 +44,10 @@ robot_config:
     name: test
     org_name: admin_org
     type: org
-secondary_init_token: HYSUJWJRLZU9TDYGI22PZHFI5GV7MXMAPTSXBSOS
+secondary_init_token: 18T36ZULD8KER8TGXSS7JYCK8Y0PAJQZFP69QJJV
 secondary_quay_email: admin@example.com
+secondary_quay_init_config: /home/ocp/misc_artifacts/quay/quay-config-truenas-initial.yaml
 secondary_quay_password: password
 secondary_quay_user: quayadmin
 secondary_server: https://central-quay.apps.ocp4.example.com
-secondary_token: LCOP36RIVD090M6JXCLNVH3SKKKC03LDP99CGEZH
-quay_secret_options:
-  super_users:
-    - test1
-    - quayadmin
-    - sovens
+secondary_token: 2UC9CIIH1RJ47GESS4JCUQWTEO0E4R7SLQEA9WE7

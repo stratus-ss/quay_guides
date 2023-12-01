@@ -10,6 +10,7 @@ import math
 import datetime
 import ast
 import yaml
+import base64
 
 parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument("--add-admin-org", action="store_true", help="Create the administrative organization")
@@ -26,6 +27,8 @@ parser.add_argument("--openshift-yaml-dir", help="The full path to the YAML file
 parser.add_argument("--overwrite-proxycache", action="store_true", help="Should any current proxycache be overridden?")
 parser.add_argument("--setup-quay-openshift", action="store_true", help="Have the management script apply OpenShift Quay configs")
 parser.add_argument("--skip-tls-verify", action="store_true", help="Ignore self signed certs on registries", default=False)
+parser.add_argument("--take-ownership", action="store_true", help="Ensure that the quay user used in the automation has ownership over all orgs")
+parser.add_argument("--take-ownership-all-super-users", action="store_true", help="Referencing the OpenShift secret, ensure all super users own all orgs")
 args = parser.parse_args()
 
 if args.debug:
@@ -74,80 +77,84 @@ if __name__ == "__main__":
         quay_server_api = QuayAPI(base_url=quay_url, api_token=quay_api_token)    
         
         quay_management = QuayManagement(quay_url=quay_url, quay_config=quay_config)
-    
-    if args.setup_quay_openshift:
-        if quay_config.quay_init_config:
-            OpenShiftCommands.openshift_login(api_url=quay_config.openshift_api_url, username=quay_config.openshift_username, passwd=quay_config.openshift_password)
-            yaml_list = BaseOperations.yaml_file_list(quay_config.openshift_yaml_dir)
-            for yaml_file in yaml_list:
-                delay = False
-                logging.info(f"Apply ---> {yaml_file} \n")
-                which_yaml_file = BaseOperations.load_config(config_file=yaml_file)
-                try:
-                    number_of_replicas = which_yaml_file['spec']['replicas']
-                except:
-                    # Its possible that the yaml doesn't have replicas, so ignore that error
-                    pass
-                if which_yaml_file['kind'] == "Subscription":
-                    if which_yaml_file['metadata']['name'] == "quay-operator":
-                        OpenShiftCommands.openshift_create_secret(namespace="quay", file_path=quay_config.quay_init_config)
-                        OpenShiftCommands.openshift_apply_file(yaml_file)
-                        OpenShiftCommands.openshift_waitfor_object(
-                                                                    openshift_object="quayregistry", 
-                                                                    iterations=10, 
-                                                                    delay_between_checks=60, 
-                                                                    namespace="quay", 
-                                                                    crd="quayregistry"
-                                                                    )
-                    elif which_yaml_file['metadata']['name'] == "odf-operator":
-                        OpenShiftCommands.openshift_apply_file(yaml_file)
-                        namespace: str = None, 
-                        OpenShiftCommands.openshift_waitfor_pods(
-                                                                openshift_object="pods", 
-                                                                iterations=15, 
-                                                                delay_between_checks=60, 
-                                                                number_of_pods=7,
-                                                                namespace="openshift-storage"
-                                                                )     
-                    else:
-                        delay = True
-                        OpenShiftCommands.openshift_apply_file(yaml_file)
-                elif which_yaml_file['kind'] == "MachineSet":
-                    infraID_output = OpenShiftCommands.openshift_get_object(object_type="infrastructure", object_name="cluster")
-                    current_infraID = OpenShiftCommands.openshift_get_infrastructure_name(command_output=infraID_output)
-                    new_machineset_location = BaseOperations.replace_infraID(path_to_original_file=yaml_file, new_infra_id=current_infraID)
-                    
-                    OpenShiftCommands.openshift_apply_file(new_machineset_location)
-                    OpenShiftCommands.openshift_waitfor_object(
-                                                                openshift_object="node", 
-                                                                iterations=20, 
-                                                                delay_between_checks=60, 
-                                                                label="cluster.ocs.openshift.io/openshift-storage", 
-                                                                replicas=number_of_replicas
-                                                                )
-                elif which_yaml_file['kind'] == "StorageCluster":
-                    OpenShiftCommands.openshift_apply_file(yaml_file)
-                    OpenShiftCommands.openshift_waitfor_storage(namespace="openshift-storage", openshift_object="pvc", iterations=35, delay_between_checks=60)
-                else:           
-                    OpenShiftCommands.openshift_apply_file(yaml_file)
-                if delay:
-                        time.sleep(700)
-    
-    if args.add_super_user:
-        quay_registry_object = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay",  
-                                                                            "object_type": "quayregistry"}), Loader=yaml.FullLoader)
-        registry_object_name = quay_registry_object['items'][0]['metadata']['name']
-        registry_object_secret = quay_registry_object['items'][0]['spec']['configBundleSecret']
-        quay_init_secret = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay", 
-                                                                                    "object_name": registry_object_secret, 
-                                                                                    "object_type": "secret"}), Loader=yaml.FullLoader)
-        quay_init_secret_decoded = QuayManagement.process_quay_secret(quay_init_secret=quay_init_secret, quay_config=quay_config, quay_secret_section="SUPER_USERS")
-        with open("/tmp/quay_init_bundle.yaml", "w" ) as file:
-            file.write(yaml.dump(quay_init_secret_decoded))
-            file.close()
 
-        output = OpenShiftCommands.openshift_replace_quay_init_secret(full_path_to_file="/tmp/quay_init_bundle.yaml", secret_name=registry_object_secret)
+    # The order might matter. We need to make sure quay is setup first, if that option is passed in
+    # After quay is setup, if we are initializing a user that has to happen next
+    # If neither of these options are passed in, we assume that we have a valid username and token
+    # as well as the appropriate permissions to make modifications to Quay (i.e. we are a super user)
+    if args.setup_quay_openshift:
+        quay_init_config = quay_config.primary_quay_init_config
+        if args.configure_secondary_quay_server:
+            quay_init_config = quay_config.secondary_quay_init_config
     
+        OpenShiftCommands.openshift_login(api_url=quay_config.openshift_api_url, username=quay_config.openshift_username, passwd=quay_config.openshift_password)
+        yaml_list = BaseOperations.yaml_file_list(quay_config.openshift_yaml_dir)
+        for yaml_file in yaml_list:
+            delay = False
+            logging.info(f"Apply ---> {yaml_file} \n")
+            which_yaml_file = BaseOperations.load_config(config_file=yaml_file)
+            try:
+                number_of_replicas = which_yaml_file['spec']['replicas']
+            except:
+                # Its possible that the yaml doesn't have replicas, so ignore that error
+                pass
+            if which_yaml_file['kind'] == "Subscription":
+                if which_yaml_file['metadata']['name'] == "quay-operator":
+                    OpenShiftCommands.openshift_create_secret(namespace="quay", file_path=quay_init_config)
+                    OpenShiftCommands.openshift_apply_file(yaml_file)
+                    OpenShiftCommands.openshift_waitfor_object(
+                                                                openshift_object="quayregistry", 
+                                                                iterations=10, 
+                                                                delay_between_checks=60, 
+                                                                namespace="quay", 
+                                                                crd="quayregistry"
+                                                                )
+                elif which_yaml_file['metadata']['name'] == "odf-operator":
+                    OpenShiftCommands.openshift_apply_file(yaml_file)
+                    namespace: str = None, 
+                    OpenShiftCommands.openshift_waitfor_pods(
+                                                            openshift_object="pods", 
+                                                            iterations=15, 
+                                                            delay_between_checks=60, 
+                                                            number_of_pods=7,
+                                                            namespace="openshift-storage"
+                                                            )     
+                else:
+                    delay = True
+                    OpenShiftCommands.openshift_apply_file(yaml_file)
+            elif which_yaml_file['kind'] == "MachineSet":
+                infraID_output = OpenShiftCommands.openshift_get_object(object_type="infrastructure", object_name="cluster")
+                current_infraID = OpenShiftCommands.openshift_get_infrastructure_name(command_output=infraID_output)
+                new_machineset_location = BaseOperations.replace_infraID(path_to_original_file=yaml_file, new_infra_id=current_infraID)
+                
+                OpenShiftCommands.openshift_apply_file(new_machineset_location)
+                OpenShiftCommands.openshift_waitfor_object(
+                                                            openshift_object="node", 
+                                                            iterations=20, 
+                                                            delay_between_checks=60, 
+                                                            label="cluster.ocs.openshift.io/openshift-storage", 
+                                                            replicas=number_of_replicas
+                                                            )
+            elif which_yaml_file['kind'] == "StorageCluster":
+                OpenShiftCommands.openshift_apply_file(yaml_file)
+                OpenShiftCommands.openshift_waitfor_storage(namespace="openshift-storage", openshift_object="pvc", iterations=35, delay_between_checks=60)
+            else:           
+                OpenShiftCommands.openshift_apply_file(yaml_file)
+            if delay:
+                    time.sleep(700)
+        quay_deployment = yaml.load(OpenShiftCommands.openshift_get_object(namespace="quay", object_type="deployment", label="quay-component=quay"), Loader=yaml.FullLoader)
+        number_of_replicas = quay_deployment['items'][0]['spec']['replicas']
+        OpenShiftCommands.openshift_waitfor_object(
+                                                        openshift_object="pod", 
+                                                        iterations=20, 
+                                                        delay_between_checks=90, 
+                                                        label="quay-component=quay-app", 
+                                                        replicas=number_of_replicas,
+                                                        namespace="quay"
+                                                        )
+        # Just because the container says running doesn't mean its warmed up so give it another bit of time
+        time.sleep(90)
+
     if args.initialize_user:
         # Do we create the first user via the one-time use API endpoint Quay has?
         new_config_line = {}
@@ -170,6 +177,21 @@ if __name__ == "__main__":
         quay_config = BaseOperations(args.config_file, args=args)
         config_token_name = eval("quay_config.%s" % token_name)
 
+    if args.add_super_user:
+        quay_registry_object = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay",  
+                                                                            "object_type": "quayregistry"}), Loader=yaml.FullLoader)
+        registry_object_name = quay_registry_object['items'][0]['metadata']['name']
+        registry_object_secret = quay_registry_object['items'][0]['spec']['configBundleSecret']
+        quay_init_secret = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay", 
+                                                                                    "object_name": registry_object_secret, 
+                                                                                    "object_type": "secret"}), Loader=yaml.FullLoader)
+        quay_init_secret_decoded = QuayManagement.process_quay_secret(quay_init_secret=quay_init_secret, quay_config=quay_config, quay_secret_section="SUPER_USERS")
+        with open("/tmp/quay_init_bundle.yaml", "w" ) as file:
+            file.write(yaml.dump(quay_init_secret_decoded))
+            file.close()
+
+        output = OpenShiftCommands.openshift_replace_quay_init_secret(full_path_to_file="/tmp/quay_init_bundle.yaml", secret_name=registry_object_secret)
+    
     if args.add_admin_org:
         if args.initialize_user:
             quay_api_token = config_token_name
@@ -300,6 +322,23 @@ if __name__ == "__main__":
     if args.add_robot_account:
         robots_exist = quay_management.get_robot(username=quay_username)
         quay_management.add_robot_acct(robot_exists=robots_exist, username=quay_username, quay_api_object=quay_server_api)
+    
+    if args.take_ownership:
+        orgs = quay_server_api.get_org()
+        QuayManagement.take_org_ownership(quay_username=quay_username, orgs=orgs, quay_server_api=quay_server_api)
+    
+    if args.take_ownership_all_super_users:
+        orgs = quay_server_api.get_org()
+        quay_registry_object = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay",  
+                                                                            "object_type": "quayregistry"}), Loader=yaml.FullLoader)
+        registry_object_name = quay_registry_object['items'][0]['metadata']['name']
+        registry_object_secret = quay_registry_object['items'][0]['spec']['configBundleSecret']
+        quay_init_secret = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay", 
+                                                                                    "object_name": registry_object_secret, 
+                                                                                    "object_type": "secret"}), Loader=yaml.FullLoader)
+        quay_init_secret_decoded = yaml.load(base64.b64decode(quay_init_secret['data']['config.yaml']), Loader=yaml.FullLoader)  
+        user_list = quay_init_secret_decoded['SUPER_USERS']
+        QuayManagement.take_org_ownership(quay_username=user_list, orgs=orgs, quay_server_api=quay_server_api)
     end_time = time.perf_counter()
     total_time = math.ceil((end_time - start_time)/60)
     logging.info(f"Total run time ---> {total_time} minutes <---")

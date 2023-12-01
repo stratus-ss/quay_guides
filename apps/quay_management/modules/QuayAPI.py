@@ -17,6 +17,9 @@ class QuayAPI:
         self.base_url = base_url
         self.repo_endpoint= self.base_url + "/api/v1/find/repositories"
         self.org_endpoint = "/api/v1/organization/"
+        self.org_member_list_endpoint = f"{self.org_endpoint}/<org>/members"
+        self.org_list_endpoint = "/api/v1/superuser/organizations/"
+        self.org_member_add_endpoint = "/api/v1/organization/<org>/team/<team_name>/members/<new_member>"
         # The <org> is a placeholder so that it can be replaced as needed
         self.proxycache_url = self.base_url + "/api/v1/organization/<org>/proxycache"
         self.initialize_url = self.base_url + "/api/v1/user/initialize"
@@ -164,6 +167,14 @@ class QuayAPI:
             logging.debug(response.text)
             return False
 
+    def create_org_member(self, org_name: str = None, new_member: str = None, team_name: str = None):
+        url = f'{self.base_url}{self.org_member_add_endpoint}'
+        url = self.assemble_org_url(org_name=org_name, url_to_replace=url)
+        url = url.replace("<team_name>", team_name)
+        url = url.replace("<new_member>", new_member)
+        response = self.put_data(url=url)
+        return(response)
+        
     def create_initial_user(self, user_info: dict = None) -> dict:
         """
         Description:
@@ -313,6 +324,22 @@ class QuayAPI:
         for tag in tag_info['tags']:
             tag_list.append(tag['name'])
         return tag_list
+    
+    def get_org(self, override_headers: bool = False, additional_api_key: str = None):
+        if override_headers:
+            headers = {'Authorization': f'Bearer {additional_api_key}'}
+        else:
+            headers = self.headers
+        url = f'{self.base_url}{self.org_list_endpoint}'
+        response = self.get_data(url=url)
+        return(response)
+    
+    def get_org_members(self, org_name: str = None):
+        url = f'{self.base_url}{self.org_member_list_endpoint}'
+        url = self.assemble_org_url(org_name=org_name, url_to_replace=url)
+        response = self.get_data(url=url)
+        return(response)
+        
         
     def get_proxycache(self, org_name: str = None) -> dict:
         """
@@ -375,4 +402,6 @@ class QuayAPI:
         Returns:
             dict: Returns the response object from the API
         """
+        if not data:
+            data = {}
         return(requests.put(f'{url}', headers=self.headers, json=data))

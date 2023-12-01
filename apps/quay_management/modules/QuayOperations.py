@@ -5,6 +5,7 @@ from .QuayAPI import QuayAPI
 from random import SystemRandom as Random
 import yaml
 import base64
+from typing import Union
 
 class ImageMover(BaseOperations):
 
@@ -16,6 +17,7 @@ class ImageMover(BaseOperations):
             server: The server to log in to.
             username: The Quay username.
             password: The Quay password.
+            args: An instance of arg parse so we know what options we are dealing with
         Returns:
             None
         """
@@ -36,7 +38,7 @@ class ImageMover(BaseOperations):
         logging.info(f"Logged in to: {server}")
  
     @classmethod
-    def podman_operations(cls, operation, image_source=None, image_destination=None, image_and_tag=None, args=None):
+    def podman_operations(cls, operation: str, image_source: str=None, image_destination: str=None, image_and_tag: str=None, args=None):
         """
         Description: 
             Performs a Podman operation on an image.
@@ -45,6 +47,7 @@ class ImageMover(BaseOperations):
             image_source (str): The source image for the operation.
             image_destination (str): The destination image for the operation.
             image_and_tag (str): The image and tag to use for the operation.
+            args: An instance of arg parse so we know what options we are dealing with
         Returns:
             None
         """
@@ -117,13 +120,14 @@ class QuayManagement():
             logging.info(f"Creating the proxy cache for ---> {proxy_data['upstream_registry']} <--- in the organization ---> {proxy_data['org_name']} <---")
             quay_api.create_proxycache(org_name=proxy_data["org_name"], json_data=proxy_data)       
         
-    def add_robot_acct(self, robot_exists: dict = None, username: str = None, quay_api_object: object = None):
+    def add_robot_acct(self, robot_exists: dict = None, username: str = None, quay_api_object: QuayAPI = None):
         """
         Description:
             Add a new robot account to the quay configuration.
         Args:
             robot_exists: A dictionary containing information about existing robots.
             username: The username of the robot to add.
+            quay_api_object: An instantiation of the QuayAPI object likely done with QuayAPI(base_url=quay_url, api_token=quay_api_token)
         """
         for key in self.quay_config.robot_config:
             robot_api = self.parse_robot_acct_info(key, api_token=quay_api_object.api_token)
@@ -137,8 +141,22 @@ class QuayManagement():
                 if username:
                     robot_api.create_robot_acct()
     
+    
     @staticmethod
-    def process_quay_secret(quay_init_secret: dict = None, quay_config: dict = None, quay_secret_section: str = "SUPER_USERS"):
+    def process_quay_secret(quay_init_secret: dict = None, quay_config: BaseOperations = None, quay_secret_section: str = "SUPER_USERS") -> dict:
+        """
+        Description: This staticmethod takes in a secret file yaml assuming the data section has already been base64 encoded.
+                    The quay secret should be in a section called "config.yaml". Decodes the config.yaml, modifies it and returns
+                    the result of the modified file. The intent is to write this out to disk so that `oc create ... |oc replace` 
+                    can be used to recreate the secret in place
+        Args:
+            quay_init_secret (dict, optional): The entire yaml file as a dict object. 
+            quay_config (dict, optional): An instantiation of the BaseOperations likely created like this: BaseOperations(args.config_file, args=args)
+            quay_secret_section (str, optional): The section of the config.yaml that should be edited. Defaults to "SUPER_USERS".
+
+        Returns:
+            dict: Returns the full quay config.yaml file so it can be used in another process
+        """
         quay_init_secret_decoded = yaml.load(base64.b64decode(quay_init_secret['data']['config.yaml']), Loader=yaml.FullLoader)
         if quay_secret_section == "SUPER_USERS":
             for user in quay_config.quay_secret_options['super_users']:
@@ -148,8 +166,6 @@ class QuayManagement():
                     quay_init_secret_decoded[quay_secret_section].append(user)
             return(quay_init_secret_decoded)
            
-                
-            
     def delete_robot(self):
         """
         Description:
@@ -192,10 +208,55 @@ class QuayManagement():
         Description:
             Parse robot account information for a given key in the quay_config dictionary.
         Args:
-            key: The key to look up in the quay_config dictionary.
+            key (str): The key to look up in the quay_config dictionary.
+            api_token (str): The api token to use for Quay api calls 
         Returns:
             A dictionary containing information about the robot account.
         """
         return QuayAPI(base_url=self.quay_url, api_token=api_token, robot_acct=self.quay_config.robot_config[key])
 
-    
+    @staticmethod
+    def take_org_ownership(orgs: dict = None, quay_server_api: QuayAPI = None, quay_username: Union[str,list[str]] = "quayadmin") -> None:
+        """
+        Description: This staticmethod checks each of the organizations in quay. By default there is
+                    a "owners" team on each org. If the {quay_username} is not in the owners team, it is added.
+        Args:
+            orgs (dict, optional): A dict with organization attributes probably generated from quay_server_api.get_org(). Defaults to None.
+            quay_server_api (QuayAPI, optional): An instantiation of the QuayAPI class probably done with 
+                                                QuayAPI(base_url=quay_url, api_token=quay_api_token). Defaults to None.
+            quay_username (str or list, optional): A username (or list of usernames) which you want to ensure is the owner of all orgs. 
+                                                Defaults to quayadmin.
+        """
+        
+        def is_not_member(user, members):
+            for member in members:
+                if member['name'] == user:
+                    return False
+            return True
+        
+        if isinstance(quay_username, str):
+            quay_username = [quay_username]
+        for org in orgs['organizations']:
+            # Start by assuming we are not the owner of the org
+            members = quay_server_api.get_org_members(org['name'])
+            for user in quay_username:
+                if is_not_member(user, members):
+                    logging.info(f"Adding {user} as an owner of --> {org['name']} <--")
+                    quay_server_api.create_org_member(org_name=org['name'], new_member=user, team_name="owners")
+                else:
+                    logging.info(f"{user} is already an owner of {org['name']}")
+            # for member in members['members']:
+            #     for user in quay_username:
+            #         if user == member['name']:
+            #             not_org_owner = True
+            #             for team in member['teams']:
+            #                 # Make sure that if the user is an owner we set the flag to false
+            #                 if team['name'] == "owners":
+            #                     not_org_owner = False
+            #                     break
+            #             if not_org_owner:
+            #                 logging.info(f"Adding {member['name']} as an owner of --> {org['name']} <--")
+            #                 quay_server_api.create_org_member(org_name=org['name'], new_member=member['name'], team_name="owners")
+            #             else:
+            #                 logging.info(f"{member['name']} is already an owner of {org['name']}")
+            
