@@ -140,32 +140,7 @@ class QuayManagement():
             else:
                 if username:
                     robot_api.create_robot_acct()
-    
-    
-    @staticmethod
-    def process_quay_secret(quay_init_secret: dict = None, quay_config: BaseOperations = None, quay_secret_section: str = "SUPER_USERS") -> dict:
-        """
-        Description: This staticmethod takes in a secret file yaml assuming the data section has already been base64 encoded.
-                    The quay secret should be in a section called "config.yaml". Decodes the config.yaml, modifies it and returns
-                    the result of the modified file. The intent is to write this out to disk so that `oc create ... |oc replace` 
-                    can be used to recreate the secret in place
-        Args:
-            quay_init_secret (dict, optional): The entire yaml file as a dict object. 
-            quay_config (dict, optional): An instantiation of the BaseOperations likely created like this: BaseOperations(args.config_file, args=args)
-            quay_secret_section (str, optional): The section of the config.yaml that should be edited. Defaults to "SUPER_USERS".
-
-        Returns:
-            dict: Returns the full quay config.yaml file so it can be used in another process
-        """
-        quay_init_secret_decoded = yaml.load(base64.b64decode(quay_init_secret['data']['config.yaml']), Loader=yaml.FullLoader)
-        if quay_secret_section == "SUPER_USERS":
-            for user in quay_config.quay_secret_options['super_users']:
-                if user in quay_init_secret_decoded[quay_secret_section]:
-                    logging.info(f"User {user} was already in the Quay SUPER_USERS secret... skipping")
-                else:
-                    quay_init_secret_decoded[quay_secret_section].append(user)
-            return(quay_init_secret_decoded)
-           
+          
     def delete_robot(self):
         """
         Description:
@@ -215,6 +190,30 @@ class QuayManagement():
         """
         return QuayAPI(base_url=self.quay_url, api_token=api_token, robot_acct=self.quay_config.robot_config[key])
 
+    @staticmethod
+    def process_quay_secret(quay_init_secret: dict = None, quay_config: BaseOperations = None, quay_secret_section: str = "SUPER_USERS") -> dict:
+        """
+        Description: This staticmethod takes in a secret file yaml assuming the data section has already been base64 encoded.
+                    The quay secret should be in a section called "config.yaml". Decodes the config.yaml, modifies it and returns
+                    the result of the modified file. The intent is to write this out to disk so that `oc create ... |oc replace` 
+                    can be used to recreate the secret in place
+        Args:
+            quay_init_secret (dict, optional): The entire yaml file as a dict object. 
+            quay_config (dict, optional): An instantiation of the BaseOperations likely created like this: BaseOperations(args.config_file, args=args)
+            quay_secret_section (str, optional): The section of the config.yaml that should be edited. Defaults to "SUPER_USERS".
+
+        Returns:
+            dict: Returns the full quay config.yaml file so it can be used in another process
+        """
+        quay_init_secret_decoded = yaml.load(base64.b64decode(quay_init_secret['data']['config.yaml']), Loader=yaml.FullLoader)
+        if quay_secret_section == "SUPER_USERS":
+            for user in quay_config.quay_secret_options['super_users']:
+                if user in quay_init_secret_decoded[quay_secret_section]:
+                    logging.info(f"User {user} was already in the Quay SUPER_USERS secret... skipping")
+                else:
+                    quay_init_secret_decoded[quay_secret_section].append(user)
+            return(quay_init_secret_decoded)
+     
     @staticmethod
     def take_org_ownership(orgs: dict = None, quay_server_api: QuayAPI = None, quay_username: Union[str,list[str]] = "quayadmin") -> None:
         """

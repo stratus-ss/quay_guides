@@ -167,7 +167,17 @@ class QuayAPI:
             logging.debug(response.text)
             return False
 
-    def create_org_member(self, org_name: str = None, new_member: str = None, team_name: str = None):
+    def create_org_member(self, org_name: str = None, new_member: str = None, team_name: str = None) -> dict:
+        """
+        Description:
+            Adds a user as a member of a specific team
+        Args:
+            org_name (str, optional): The name of the orgnaization where the new membership should reside
+            new_member (str, optional): The name of the user to add a membership for
+            team_name (str, optional): The name of the team to add the user to
+        Returns:
+            (dict): The API response as a dict
+        """
         url = f'{self.base_url}{self.org_member_add_endpoint}'
         url = self.assemble_org_url(org_name=org_name, url_to_replace=url)
         url = url.replace("<team_name>", team_name)

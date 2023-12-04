@@ -226,29 +226,31 @@ class BaseOperations:
                         )
             exit(1)
 
-    @classmethod
-    def load_config(cls, config_file: str) -> dict[str,str]:
+    @staticmethod
+    def add_to_config(config_path: str = None, insert_dict: dict = None):
         """
-        Description: 
-            Loads the configuration from the specified file.
+        Description:
+            Updates the config.yaml for the quay activities in this repo. 
+            Does NOT update the Quay config that dictates how Quay behaves
         Args:
-            config_file: The path to the configuration file.
-
-        Returns:
-            A dictionary containing the configuration data.
+            config_path (str, optional): The full path to the sample_config.yaml
+            insert_dict (dict, optional): The data to insert into the sample_config.yaml. Right now 
+                                        it is assumed you need to write a dict into the
         """
-
-        try:
-            with open(config_file, 'r') as f:
-                data = yaml.load(f, Loader=yaml.FullLoader)
-        except FileNotFoundError:
-            logging.critical(f"--> Config file not found: {config_file}")
-            exit(1)
-        except yaml.YAMLError as e:
-            logging.critical(f"--> Error parsing config file: {e}")
-
-            exit(1)
-        return data
+        logging.info(f"Reading {config_path}...")
+        with open(config_path, "r") as file:
+            yaml_dict = file.read()
+        yaml_dict = yaml.load(yaml_dict, Loader=yaml.FullLoader)
+        if not isinstance(insert_dict, dict):
+            logging.error(f"Cannot add {insert_dict} to config file. It is not a dict")
+            exit(1)   
+        for key in insert_dict:
+            yaml_dict[key] = insert_dict[key]
+        file.close()
+        logging.info(f"Writing new contents to {config_path}")
+        with open(config_path, "w") as file:
+            file.write(yaml.dump(yaml_dict))
+            file.close()
 
     @classmethod
     def do_i_skip_tls(cls, command: list[str], skip_tls_verify: bool = False ) -> list[str]:
@@ -265,38 +267,6 @@ class BaseOperations:
         if skip_tls_verify:
             command.append("--tls-verify=false")
         return(command)
-
-    @staticmethod
-    def yaml_file_list(file_directory):
-        files_list = []
-        for root, dirs, files in os.walk(file_directory):
-            for file in files:
-                if root:
-                    full_file_path = os.path.join(root, file)
-                    if full_file_path not in files_list:
-                        files_list.append(full_file_path)
-        files_list.sort()
-        return(files_list)
-
-    @staticmethod
-    def replace_infraID(path_to_original_file: str, new_infra_id: str) -> str:
-        """
-        Description:
-            This is intended adjust a machine config so that it can be templated
-        Args:
-            path_to_original_file (str): This is the templated machineconfig
-            new_infra_id (str): This is the infraID of the current cluster
-        Return:
-            The location of the temp file
-        """
-        with open(path_to_original_file, 'r') as read_file:
-            filedata = read_file.read()
-        filedata = filedata.replace('<INFRAID>', new_infra_id)
-        new_machineset_file = tempfile.NamedTemporaryFile(delete=False)
-        with open(new_machineset_file.name, 'w') as write_file:
-            write_file.write(filedata)
-        write_file.close()
-        return(new_machineset_file.name)
 
     @staticmethod
     def create_initial_oauth_script(user_id: str = None, app_id: str = None, db_info: dict = None) -> str:
@@ -388,29 +358,61 @@ print(app_info_dict)
             f.write(python_script)
             f.close()
         return(local_file_location)
-    
+
+
+    @classmethod
+    def load_config(cls, config_file: str) -> dict[str,str]:
+        """
+        Description: 
+            Loads the configuration from the specified file.
+        Args:
+            config_file: The path to the configuration file.
+
+        Returns:
+            A dictionary containing the configuration data.
+        """
+
+        try:
+            with open(config_file, 'r') as f:
+                data = yaml.load(f, Loader=yaml.FullLoader)
+        except FileNotFoundError:
+            logging.critical(f"--> Config file not found: {config_file}")
+            exit(1)
+        except yaml.YAMLError as e:
+            logging.critical(f"--> Error parsing config file: {e}")
+
+            exit(1)
+        return data
+
     @staticmethod
-    def add_to_config(config_path: str = None, insert_dict: dict = None):
+    def replace_infraID(path_to_original_file: str, new_infra_id: str) -> str:
         """
         Description:
-            Updates the config.yaml for the quay activities in this repo. 
-            Does NOT update the Quay config that dictates how Quay behaves
+            This is intended adjust a machine config so that it can be templated
         Args:
-            config_path (str, optional): The full path to the sample_config.yaml
-            insert_dict (dict, optional): The data to insert into the sample_config.yaml. Right now 
-                                        it is assumed you need to write a dict into the file
+            path_to_original_file (str): This is the templated machineconfig
+            new_infra_id (str): This is the infraID of the current cluster
+        Return:
+            The location of the temp file
         """
-        logging.info(f"Reading {config_path}...")
-        with open(config_path, "r") as file:
-            yaml_dict = file.read()
-        yaml_dict = yaml.load(yaml_dict, Loader=yaml.FullLoader)
-        if not isinstance(insert_dict, dict):
-            logging.error(f"Cannot add {insert_dict} to config file. It is not a dict")
-            exit(1)   
-        for key in insert_dict:
-            yaml_dict[key] = insert_dict[key]
-        file.close()
-        logging.info(f"Writing new contents to {config_path}")
-        with open(config_path, "w") as file:
-            file.write(yaml.dump(yaml_dict))
-            file.close()
+        with open(path_to_original_file, 'r') as read_file:
+            filedata = read_file.read()
+        filedata = filedata.replace('<INFRAID>', new_infra_id)
+        new_machineset_file = tempfile.NamedTemporaryFile(delete=False)
+        with open(new_machineset_file.name, 'w') as write_file:
+            write_file.write(filedata)
+        write_file.close()
+        return(new_machineset_file.name)
+
+    @staticmethod
+    def yaml_file_list(file_directory):
+        files_list = []
+        for root, dirs, files in os.walk(file_directory):
+            for file in files:
+                if root:
+                    full_file_path = os.path.join(root, file)
+                    if full_file_path not in files_list:
+                        files_list.append(full_file_path)
+        files_list.sort()
+        return(files_list)
+    

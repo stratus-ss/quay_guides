@@ -188,7 +188,16 @@ class OpenShiftCommands:
         return(object_ready)
 
     @staticmethod
-    def openshift_replace_quay_init_secret(full_path_to_file: str = None, secret_name: str = None):
+    def openshift_replace_quay_init_secret(full_path_to_file: str = None, secret_name: str = None, namespace: str = "quay"):
+        """
+        Description:
+            Uses 'oc replace' in order to update a secret in OpenShift
+        Args:
+            full_path_to_file (str, optional): The path to the secret file with updated contents
+            secret_name (str, optional): The name of the secret in OpenShift to replace
+        Returns: 
+            Nothing. This method performs an action with no returns
+        """
         openshift_create_secret_cmd = ["oc", "create", "secret", "generic", secret_name, f"--from-file=config.yaml={full_path_to_file}", "--dry-run=client", "-o", "yaml"]
         new_secret_file_path = "/tmp/quay_new_secret.yaml"
         try:
@@ -202,7 +211,7 @@ class OpenShiftCommands:
         with open(new_secret_file_path, "w") as file:
             file.write(yaml.dump(yaml.load(secret_output, Loader=yaml.FullLoader)))
             file.close()
-        openshift_replace_secret_cmd = ["oc", "replace", "-f", new_secret_file_path, "-n", "quay"]
+        openshift_replace_secret_cmd = ["oc", "replace", "-f", new_secret_file_path, "-n", namespace]
         try:
             output = (subprocess.check_output(openshift_replace_secret_cmd))
         except:
