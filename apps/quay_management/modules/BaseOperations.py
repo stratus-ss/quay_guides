@@ -213,6 +213,8 @@ class BaseOperations:
             try:
                 # Attempt to creaate self.{key} names as variables on the class
                 setattr(self, options, self.config[options])
+                if not self.config[options]:
+                    raise KeyError(options)
             except Exception as e:
                 errors.append(e.args[0])
         # If there are errors, loop over any keys that we could not parse and print their
