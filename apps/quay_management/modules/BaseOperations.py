@@ -221,8 +221,9 @@ class BaseOperations:
         # options to the screen
         if errors:
             errors.sort()
+            logging.error("The config file has missing values and/or options")
             for key in errors:
-                print(f"""{key}:
+                logging.info(f"""{key}:
                         type: {expected_config_values[key]['type']}
                         description: {expected_config_values[key]['desc']}\n"""
                         )
