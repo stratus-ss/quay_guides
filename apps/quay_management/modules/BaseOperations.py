@@ -79,6 +79,7 @@ class BaseOperations:
                         "openshift_username": {"type": "string", "desc": "OpenShift cluster admin username"},
                         "openshift_password": {"type": "string", "desc": "OpenShift cluster admin password"},
                         "openshift_yaml_dir": {"type": "string", "desc": "Full path to the directory with YAMLs to be applied to the OpenShift cluster"},
+                        "primary_quay_init_config": {"type": "string", "desc": "The path to the quay configuration for primary site"},
                         }
         
         quay_super_users = {
@@ -223,7 +224,7 @@ class BaseOperations:
             errors.sort()
             logging.error("The config file has missing values and/or options")
             for key in errors:
-                logging.info(f"""{key}:
+                print(f"""{key}:
                         type: {expected_config_values[key]['type']}
                         description: {expected_config_values[key]['desc']}\n"""
                         )

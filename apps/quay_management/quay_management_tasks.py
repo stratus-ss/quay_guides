@@ -78,10 +78,10 @@ if __name__ == "__main__":
         # which will be True
         active_args = []
         for arg in vars(args):
-            if "skip_tls_verify" in arg:
-                pass
-            if "debug" in arg:
-                pass
+            if arg == "skip_tls_verify" :
+                continue
+            if arg == "debug":
+                continue
             if eval(f"args.{arg}") == True:
                 active_args.append(arg)
         need_quay_info = False
