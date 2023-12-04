@@ -163,6 +163,8 @@ class BaseOperations:
                     quay_password = "primary_quay_password"
                     if args.configure_secondary_quay_server:
                         token_name = "secondary_init_token"
+                        quay_user = "secondary_quay_user"
+                        quay_password = "secondary_quay_password"
                     new_items = [{"initialize_username": all_options["initialize_username"]},
                                 {"initialize_password": all_options["initialize_password"]},
                                 {"initialize_email": all_options["initialize_email"]},
@@ -389,6 +391,15 @@ print(app_info_dict)
     
     @staticmethod
     def add_to_config(config_path: str = None, insert_dict: dict = None):
+        """
+        Description:
+            Updates the config.yaml for the quay activities in this repo. 
+            Does NOT update the Quay config that dictates how Quay behaves
+        Args:
+            config_path (str, optional): The full path to the sample_config.yaml
+            insert_dict (dict, optional): The data to insert into the sample_config.yaml. Right now 
+                                        it is assumed you need to write a dict into the file
+        """
         logging.info(f"Reading {config_path}...")
         with open(config_path, "r") as file:
             yaml_dict = file.read()

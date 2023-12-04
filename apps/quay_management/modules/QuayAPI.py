@@ -325,7 +325,18 @@ class QuayAPI:
             tag_list.append(tag['name'])
         return tag_list
     
-    def get_org(self, override_headers: bool = False, additional_api_key: str = None):
+    def get_org(self, override_headers: bool = False, additional_api_key: str = None) -> dict:
+        """
+        Description:
+            Gets a list of all the organizations in Quay
+        Args:
+            override_headers (bool, optional): There may be cases where you need to override the headers
+                                                because you want to use a different API key.
+            additional_api_key (str, optional): If you need to change the API key for some reason
+                                                use this key instead
+        Returns:
+            (dict): Returns the API response as a dict
+        """
         if override_headers:
             headers = {'Authorization': f'Bearer {additional_api_key}'}
         else:
@@ -334,7 +345,15 @@ class QuayAPI:
         response = self.get_data(url=url)
         return(response)
     
-    def get_org_members(self, org_name: str = None):
+    def get_org_members(self, org_name: str = None) -> dict:
+        """
+        Description:
+            Gets the current members of the specified organization
+        Args:
+            org_name (str, optional): The name of the Quay organization to get a member list from. 
+        Returns:
+            (dict): The response object from the API
+        """
         url = f'{self.base_url}{self.org_member_list_endpoint}'
         url = self.assemble_org_url(org_name=org_name, url_to_replace=url)
         response = self.get_data(url=url)
