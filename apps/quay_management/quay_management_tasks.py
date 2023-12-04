@@ -70,13 +70,33 @@ if __name__ == "__main__":
             quay_server = "primary_server"
             quay_token = "primary_token"
             quay_user = "primary_quay_user"
-
-        quay_url = eval("quay_config.%s" % quay_server)
-        quay_username = eval("quay_config.%s" %  quay_user)
-        quay_api_token = eval("quay_config.%s" % quay_token)
-        quay_server_api = QuayAPI(base_url=quay_url, api_token=quay_api_token)    
         
-        quay_management = QuayManagement(quay_url=quay_url, quay_config=quay_config)
+        # These options don't need Quay Information
+        dont_need_quay = ["initialize_oauth", "setup_quay_openshift", "add_super_user"]
+        
+        # We want to capture any arguments passed in by the user
+        # which will be True
+        active_args = []
+        for arg in vars(args):
+            if "skip_tls_verify" in arg:
+                pass
+            if "debug" in arg:
+                pass
+            if eval(f"args.{arg}") == True:
+                active_args.append(arg)
+        need_quay_info = False
+        if active_args:
+            for arg in active_args:
+                if arg not in dont_need_quay:
+                    need_quay_info = True
+                    break
+        
+        if need_quay_info:
+            quay_url = eval("quay_config.%s" % quay_server)
+            quay_username = eval("quay_config.%s" %  quay_user)
+            quay_api_token = eval("quay_config.%s" % quay_token)
+            quay_server_api = QuayAPI(base_url=quay_url, api_token=quay_api_token)    
+            quay_management = QuayManagement(quay_url=quay_url, quay_config=quay_config)
 
     # The order might matter. We need to make sure quay is setup first, if that option is passed in
     # After quay is setup, if we are initializing a user that has to happen next

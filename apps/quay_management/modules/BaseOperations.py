@@ -188,9 +188,9 @@ class BaseOperations:
                 if args.manage_orgs:
                     try:
                         args.secondary_quay_config
-                        server_type = "secondary_server"
+                        server_type = "secondary"
                     except: 
-                        server_type = "primary_server"
+                        server_type = "primary"
                     add_these_options = [{"organizations": all_options["organizations"]}]
                     for key in sync_generic_options:
                         # Only want the secondary related variables from the config.yaml
