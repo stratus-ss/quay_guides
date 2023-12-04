@@ -23,7 +23,7 @@ Almost all the options that have 'values' are referenced from the application co
 
 Currently this program supports the following functionality:
 
-* Install Quay on OpenShift via loading mostly preconfigured YAML files. (Some things like the machineconfig can be templated somewhat... See [machineconfig sampe](https://github.com/stratus-ss/quay_guides/blob/main/apps/quay_management/config/samples/odf_quay_manifests/0001-ODF_machineset.yaml))
+* Install Quay on OpenShift via loading mostly preconfigured YAML files. (Some things like the machineconfig can be templated somewhat... See [machineconfig sample](https://github.com/stratus-ss/quay_guides/blob/main/apps/quay_management/config/samples/odf_quay_manifests/0001-ODF_machineset.yaml))
 * Initialize a Quay User. Assuming the options have been set in your `init-config-bundle-secret`, the first Quay user can be created
 * Creates an initial OAUTH token and writes it to the passed in sample_config.yaml file
 * Can create an admin organization where automation related objects (oauth tokens, robot accounts etc) can be attached
@@ -114,6 +114,11 @@ It is expected that all files are in the same directory and no other files are i
 ##### Cluster Login
 
 As this is meant to install Operators and other objects, a user with cluster admin is expected. Currently, the login expects a username and password, but this may be changed in the future to also support `kubeconfig` files.
+
+##### Quay Configuration
+
+Currently the program does not help with configuring Quay *at all*. It assumes you have a valid Quay ini config. There is a [sample](https://github.com/stratus-ss/quay_guides/blob/main/apps/quay_management/config/quay_init.ini) included in the repo. For more information you can see the [Quay Project Docs](https://docs.projectquay.io/config_quay.html) and/or the [Red Hat Quay Docs](https://access.redhat.com/documentation/en-us/red_hat_quay/3.9/html-single/configure_red_hat_quay/index#config-fields-required-intro)
+
 
 ## Quay Sync
 
