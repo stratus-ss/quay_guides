@@ -405,7 +405,15 @@ print(app_info_dict)
         return(new_machineset_file.name)
 
     @staticmethod
-    def yaml_file_list(file_directory):
+    def yaml_file_list(file_directory: str) -> list:
+        """
+        Description:
+            Walks the file system of a given toplevel directory to find all files there. Appends a full path to each file
+        Args:
+            file_directory (str): The path to the directory with the yaml files to apply to the OpenShift cluster
+        Returns:
+            (list): A list for files with their full paths
+        """
         files_list = []
         for root, dirs, files in os.walk(file_directory):
             for file in files:
