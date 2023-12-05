@@ -44,7 +44,7 @@ if __name__ == "__main__":
     quay_config = BaseOperations(args.config_file, args=args)
     
     check_quay_options = True
-    
+    openshift_logged_in = False
     if args.add_super_user:
         # There may be cases where the Quay information is not required
         # It is likely that the config file and only one other argument are passed in 
@@ -98,16 +98,20 @@ if __name__ == "__main__":
             quay_server_api = QuayAPI(base_url=quay_url, api_token=quay_api_token)    
             quay_management = QuayManagement(quay_url=quay_url, quay_config=quay_config)
 
+    if args.add_super_user or args.setup_quay_openshift or args.initialize_oauth or args.take_ownership_all_super_users:
+        quay_namespace = quay_config.primary_quay_namespace
+        if args.configure_secondary_quay_server:
+            quay_init_config = quay_config.secondary_quay_init_config
+            quay_namespace = quay_config.secondary_quay_namespace
+
     # The order might matter. We need to make sure quay is setup first, if that option is passed in
     # After quay is setup, if we are initializing a user that has to happen next
     # If neither of these options are passed in, we assume that we have a valid username and token
     # as well as the appropriate permissions to make modifications to Quay (i.e. we are a super user)
     if args.setup_quay_openshift:
         quay_init_config = quay_config.primary_quay_init_config
-        if args.configure_secondary_quay_server:
-            quay_init_config = quay_config.secondary_quay_init_config
-    
         OpenShiftCommands.openshift_login(api_url=quay_config.openshift_api_url, username=quay_config.openshift_username, passwd=quay_config.openshift_password)
+        openshift_logged_in = True
         yaml_list = BaseOperations.yaml_file_list(quay_config.openshift_yaml_dir)
         for yaml_file in yaml_list:
             delay = False
@@ -120,13 +124,14 @@ if __name__ == "__main__":
                 pass
             if which_yaml_file['kind'] == "Subscription":
                 if which_yaml_file['metadata']['name'] == "quay-operator":
-                    OpenShiftCommands.openshift_create_secret(namespace="quay", file_path=quay_init_config)
+                    OpenShiftCommands.openshift_create_secret(namespace=quay_namespace, file_path=quay_init_config)
                     OpenShiftCommands.openshift_apply_file(yaml_file)
+                    logging.debug("----> Waiting for the Quay Registry to be created...")
                     OpenShiftCommands.openshift_waitfor_object(
                                                                 openshift_object="quayregistry", 
                                                                 iterations=10, 
-                                                                delay_between_checks=60, 
-                                                                namespace="quay", 
+                                                                delay_between_checks=100, 
+                                                                namespace=quay_namespace, 
                                                                 crd="quayregistry"
                                                                 )
                 elif which_yaml_file['metadata']['name'] == "odf-operator":
@@ -148,6 +153,7 @@ if __name__ == "__main__":
                 new_machineset_location = BaseOperations.replace_infraID(path_to_original_file=yaml_file, new_infra_id=current_infraID)
                 
                 OpenShiftCommands.openshift_apply_file(new_machineset_location)
+                logging.debug("----> Waiting for the nodes to be created")
                 OpenShiftCommands.openshift_waitfor_object(
                                                             openshift_object="node", 
                                                             iterations=20, 
@@ -157,20 +163,24 @@ if __name__ == "__main__":
                                                             )
             elif which_yaml_file['kind'] == "StorageCluster":
                 OpenShiftCommands.openshift_apply_file(yaml_file)
+                logging.debug("----> Waiting for the ODF PVCs to be ready...")
                 OpenShiftCommands.openshift_waitfor_storage(namespace="openshift-storage", openshift_object="pvc", iterations=35, delay_between_checks=60)
             else:           
                 OpenShiftCommands.openshift_apply_file(yaml_file)
             if delay:
                     time.sleep(700)
-        quay_deployment = yaml.load(OpenShiftCommands.openshift_get_object(namespace="quay", object_type="deployment", label="quay-component=quay"), Loader=yaml.FullLoader)
+        # Introduce a small delay after the quay registry object is detected to make sure that the deployment objects are created
+        time.sleep(60)
+        quay_deployment = yaml.load(OpenShiftCommands.openshift_get_object(namespace=quay_namespace, object_type="deployment", label="quay-component=quay"), Loader=yaml.FullLoader)
         number_of_replicas = quay_deployment['items'][0]['spec']['replicas']
+        logging.debug("----> Waiting for the Quay Pods with the label 'quay-component=quay' to become ready ...")
         OpenShiftCommands.openshift_waitfor_object(
                                                         openshift_object="pod", 
                                                         iterations=20, 
                                                         delay_between_checks=90, 
                                                         label="quay-component=quay-app", 
                                                         replicas=number_of_replicas,
-                                                        namespace="quay"
+                                                        namespace=quay_namespace
                                                         )
         # Just because the container says running doesn't mean its warmed up so give it another bit of time
         time.sleep(90)
@@ -179,8 +189,11 @@ if __name__ == "__main__":
         # Do we create the first user via the one-time use API endpoint Quay has?
         new_config_line = {}
         user_info = {"username": quay_config.initialize_username, "password": quay_config.initialize_password, "email": quay_config.initialize_email, "access_token": "true"}
+        logging.debug(f"Establishing connection to {quay_url}")
         quay_server_api = QuayAPI(base_url=quay_url)
+        logging.info("Attempting to create the intiale user")
         initial_user_response = quay_server_api.create_initial_user(user_info=user_info)
+        logging.debug(f"The initial user request response: {initial_user_response}")
         access_token = ast.literal_eval(initial_user_response.text.strip("\n"))
         token_name = "primary_init_token"
         if args.configure_secondary_quay_server:
@@ -192,45 +205,59 @@ if __name__ == "__main__":
                 f.write(initial_user_response.content.decode())
                 f.close()
         new_config_line[token_name] = access_token['access_token']
+        logging.debug(f"Writing initial user config to {args.config_file}")
         quay_config.add_to_config(args.config_file, new_config_line)
         # reread the config file
         quay_config = BaseOperations(args.config_file, args=args)
-        config_token_name = eval("quay_config.%s" % token_name)
+        init_config_token_name = eval("quay_config.%s" % token_name)
 
     if args.add_super_user:
-        quay_registry_object = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay",  
+        # If we haven't logged into OpenShift yet, do so now
+        if not openshift_logged_in:
+            logging.debug(f"Attempting to login into {quay_config.openshift_api_url} as {quay_config.openshift_username}")
+            OpenShiftCommands.openshift_login(api_url=quay_config.openshift_api_url, username=quay_config.openshift_username, passwd=quay_config.openshift_password)
+            openshift_logged_in = True
+        logging.info("Attempting to add super users to OpenShift secret")
+        quay_registry_object = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": quay_namespace,  
                                                                             "object_type": "quayregistry"}), Loader=yaml.FullLoader)
         registry_object_name = quay_registry_object['items'][0]['metadata']['name']
         registry_object_secret = quay_registry_object['items'][0]['spec']['configBundleSecret']
-        quay_init_secret = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay", 
+        quay_init_secret = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": quay_namespace, 
                                                                                     "object_name": registry_object_secret, 
                                                                                     "object_type": "secret"}), Loader=yaml.FullLoader)
         quay_init_secret_decoded = QuayManagement.process_quay_secret(quay_init_secret=quay_init_secret, quay_config=quay_config, quay_secret_section="SUPER_USERS")
+        if args.debug:
+            logging.debug("The contents of the Quay Secret is:")
+            print(quay_init_secret_decoded)
         with open("/tmp/quay_init_bundle.yaml", "w" ) as file:
             file.write(yaml.dump(quay_init_secret_decoded))
             file.close()
-
+        logging.info(f"Replacing the secret {registry_object_secret}")
         output = OpenShiftCommands.openshift_replace_quay_init_secret(full_path_to_file="/tmp/quay_init_bundle.yaml", secret_name=registry_object_secret)
     
     if args.add_admin_org:
         if args.initialize_user:
-            quay_api_token = config_token_name
+            quay_api_token = init_config_token_name
         quay_server_api = QuayAPI(base_url=quay_url, api_token=quay_api_token)
+        logging.info(f"Attempting to create {quay_config.quay_admin_org}")
         quay_server_api.create_org(org_name=quay_config.quay_admin_org)
         response = quay_server_api.create_oauth_application(org_name=quay_config.quay_admin_org)
+        logging.debug(response)
         print()
     if args.initialize_oauth:
-        if args.debug:
+        # If we haven't logged into OpenShift yet, do so now
+        if not openshift_logged_in:
             logging.debug(f"Attempting to login into {quay_config.openshift_api_url} as {quay_config.openshift_username}")
-        OpenShiftCommands.openshift_login(api_url=quay_config.openshift_api_url, username=quay_config.openshift_username, passwd=quay_config.openshift_password)
-        pod_response = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay", 
+            OpenShiftCommands.openshift_login(api_url=quay_config.openshift_api_url, username=quay_config.openshift_username, passwd=quay_config.openshift_password)
+            openshift_logged_in = True
+        pod_response = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": quay_namespace, 
                                                                         "label": "quay-component=quay-app", 
                                                                         "object_type": "pods"}), Loader=yaml.FullLoader)
         select = "SELECT * FROM public.oauthapplication"
-        if args.debug:
-            logging.debug("Attempting get database information from the postgres-config-secret")
+        
+        logging.debug("Attempting get database information from the postgres-config-secret")
             
-        all_quay_secrets = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay", 
+        all_quay_secrets = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": quay_namespace, 
                                                                             "label": "quay-operator/quayregistry=central", 
                                                                             "object_type": "secret"}), Loader=yaml.FullLoader)
         db_secret_dict = {}
@@ -238,24 +265,25 @@ if __name__ == "__main__":
             if "postgres-config-secret" in secret['metadata']['name']:
                 db_secret_dict = secret
         db_info = OpenShiftCommands.openshift_process_secret(secret=db_secret_dict)
-        quay_db_service = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay", 
+        quay_db_service = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": quay_namespace, 
                                                                             "label": "quay-component=postgres", 
                                                                             "object_type": "svc"}), Loader=yaml.FullLoader)['items'][0]['metadata']['name']
         db_info['database-svc'] = quay_db_service
-        if args.debug:
-            logging.debug(f"The database secret is:")
-            logging.debug(db_info)
+        logging.debug(f"The database secret is:")
+        logging.debug(db_info)
         oauthapplication_script_location = quay_config.create_db_info_script(select_statement=select, db_info=db_info)
         OpenShiftCommands.openshift_transfer_file(filename=oauthapplication_script_location,  
                                                 pod_name=pod_response['items'][0]['metadata']['name'], 
-                                                namespace="quay")
+                                                namespace=quay_namespace)
         
+        logging.debug("Retrieving current records from public.oauthapplication")
+        logging.debug(f"Running /tmp/generic.py in the {pod_response['items'][0]['metadata']['name']} pod")
         if args.debug:
-            logging.debug("Retrieving current records from public.oauthapplication")
-            logging.debug(f"Running /tmp/generic.py in the {pod_response['items'][0]['metadata']['name']} pod")
-            
+            logging.debug("The contents of the database script is:")
+            with open(oauthapplication_script_location) as file:
+                print(file.read())
         oauthapplication_select_output = ast.literal_eval(OpenShiftCommands.openshift_exec_pod(pod_name=pod_response['items'][0]['metadata']['name'], 
-                                                                                        namespace="quay",
+                                                                                        namespace=quay_namespace,
                                                                                         command=["/usr/bin/python", "/tmp/generic.py"]).decode().strip("\n").strip("\r"))
         
 
@@ -263,13 +291,16 @@ if __name__ == "__main__":
         oauthaccesstoken_script_location = quay_config.create_db_info_script(select_statement=select, db_info=db_info)
         OpenShiftCommands.openshift_transfer_file(filename=oauthaccesstoken_script_location, 
                                                 pod_name=pod_response['items'][0]['metadata']['name'], 
-                                                namespace="quay")
+                                                namespace=quay_namespace)
+
+        logging.debug("Retrieving current records from public.oauthaccesstoken")
+        logging.debug(f"Running /tmp/generic.py in the {pod_response['items'][0]['metadata']['name']} pod")
         if args.debug:
-            logging.debug("Retrieving current records from public.oauthaccesstoken")
-            logging.debug(f"Running /tmp/generic.py in the {pod_response['items'][0]['metadata']['name']} pod")
-            
+            logging.debug("The contents of the database script is:")
+            with open(oauthaccesstoken_script_location) as file:
+                print(file.read())    
         oauthaccesstoken_select_output = ast.literal_eval(OpenShiftCommands.openshift_exec_pod(pod_name=pod_response['items'][0]['metadata']['name'], 
-                                                                                        namespace="quay",
+                                                                                        namespace=quay_namespace,
                                                                                         command=["/usr/bin/python", "/tmp/generic.py"]).decode().strip("\n").strip("\r"))
         
         oauth_app_database_id = ""
@@ -278,18 +309,16 @@ if __name__ == "__main__":
         oauth_access_app_id = ""
         for key in oauthapplication_select_output:
             if oauthapplication_select_output[key]['oauth_name'] == "automation":
-                if args.debug:
-                    logging.debug("Found the 'automation' OAUTH application")
-                    logging.debug("This is being used to type the OAUTH key to")
-                    logging.debug(oauthapplication_select_output[key])
+                logging.debug("Found the 'automation' OAUTH application")
+                logging.debug("This is being used to type the OAUTH key to")
+                logging.debug(oauthapplication_select_output[key])
                 oauth_app_database_id = key
                 oauth_app_org_id = oauthapplication_select_output[key]['org_id']
 
         for key in oauthaccesstoken_select_output:
             if oauthaccesstoken_select_output[key]['app_id'] == oauth_app_database_id:
-                if args.debug:
-                    logging.debug("Found the oauth database records")
-                    logging.debug(oauthaccesstoken_select_output[key])
+                logging.debug("Found the oauth database records")
+                logging.debug(oauthaccesstoken_select_output[key])
                 oauth_access_uid = oauthaccesstoken_select_output[key]['user_id']
                 oauth_access_app_id = oauthaccesstoken_select_output[key]['app_id']
 
@@ -298,18 +327,21 @@ if __name__ == "__main__":
                                             db_info=db_info)
         if args.debug:
             logging.debug(f"Attempting to transfer {initialize_oauth_script} to {pod_response['items'][0]['metadata']['name']}")
+            logging.debug("The contents of the database script is:")
+            with open(initialize_oauth_script) as file:
+                print(file.read())  
         OpenShiftCommands.openshift_transfer_file(filename=initialize_oauth_script, 
                                                 pod_name=pod_response['items'][0]['metadata']['name'], 
-                                                namespace="quay")
+                                                namespace=quay_namespace)
         oauthaccesstoken_db_output = ast.literal_eval(OpenShiftCommands.openshift_exec_pod(pod_name=pod_response['items'][0]['metadata']['name'], 
-                                                                                        namespace="quay",
+                                                                                        namespace=quay_namespace,
                                                                                         command=["/usr/bin/python", "/tmp/generic.py"]).decode().strip("\n").strip("\r"))
         if args.debug: 
             logging.debug(f"Database activities respose: {oauthaccesstoken_db_output}")
             logging.debug(f"The generated token is: {oauth_token}")
         if not args.debug:
             OpenShiftCommands.openshift_exec_pod(pod_name=pod_response['items'][0]['metadata']['name'], 
-                                                                                        namespace="quay",
+                                                                                        namespace=quay_namespace,
                                                                                         command=["/usr/bin/rm", "/tmp/generic.py"])
         
         new_line = {"primary_token": oauth_token}
@@ -321,14 +353,10 @@ if __name__ == "__main__":
         quay_config.add_to_config(config_path=args.config_file, insert_dict=new_line)
         # reread the config file because it should have new information in it
         quay_config = BaseOperations(args.config_file, args=args)
-        # regenerate api session
-        action_this_cluster = QuayAPI(base_url=quay_url, api_token=quay_api_token)
-        # Refresh the config in the quay_management class instantiation
-        quay_management = QuayManagement(quay_url=quay_url, quay_config=quay_config)
 
     if args.manage_orgs:
         if args.initialize_user:
-            quay_api_token = config_token_name
+            quay_api_token = init_config_token_name
         quay_server_api = QuayAPI(base_url=quay_url, api_token=quay_api_token)
         for key in quay_config.organizations:
             if quay_config.organizations[key]['present']:
@@ -344,16 +372,18 @@ if __name__ == "__main__":
         quay_management.add_robot_acct(robot_exists=robots_exist, username=quay_username, quay_api_object=quay_server_api)
     
     if args.take_ownership:
+        quay_server_api = QuayAPI(base_url=quay_url, api_token=quay_api_token)
         orgs = quay_server_api.get_org()
         QuayManagement.take_org_ownership(quay_username=quay_username, orgs=orgs, quay_server_api=quay_server_api)
     
     if args.take_ownership_all_super_users:
+        quay_server_api = QuayAPI(base_url=quay_url, api_token=quay_api_token)
         orgs = quay_server_api.get_org()
-        quay_registry_object = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay",  
+        quay_registry_object = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": quay_namespace,  
                                                                             "object_type": "quayregistry"}), Loader=yaml.FullLoader)
         registry_object_name = quay_registry_object['items'][0]['metadata']['name']
         registry_object_secret = quay_registry_object['items'][0]['spec']['configBundleSecret']
-        quay_init_secret = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": "quay", 
+        quay_init_secret = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": quay_namespace, 
                                                                                     "object_name": registry_object_secret, 
                                                                                     "object_type": "secret"}), Loader=yaml.FullLoader)
         quay_init_secret_decoded = yaml.load(base64.b64decode(quay_init_secret['data']['config.yaml']), Loader=yaml.FullLoader)  

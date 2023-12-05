@@ -2,7 +2,7 @@ failover: false
 initialize_email: admin@example.com
 initialize_password: password
 initialize_username: quayadmin
-openshift_api_url: https://api.ocp4.example.com:6443
+openshift_api_url: https://api.quay-rep.example.com:6443
 openshift_password: password
 openshift_username: admin
 openshift_yaml_dir: /home/ocp/misc_artifacts/quay/quay_only_manifests/
@@ -13,12 +13,13 @@ organizations:
     present: true
   test:
     present: false
-primary_init_token: GCM411D4FML0MLRO14A8HHAH6JIPAD6WGQCGCNMB
+primary_init_token: SFS3NGNAQECB87ZT92PY88KR8NR4H9LWVKP74DWL
 primary_quay_init_config: /home/ocp/misc_artifacts/quay/quay-config-minio-initial.yaml
+primary_quay_namespace: quay
 primary_quay_password: password
 primary_quay_user: quayadmin
 primary_server: https://central-quay.apps.quay-rep.example.com
-primary_token: VIPZTAX30LS5Y98SGU3JB4NM2NAW489IQJ03599T
+primary_token: ZO828LUFO642RQZH2RH3AX2LA2DA5OHE0EW636LQ
 proxycache:
   org1:
     org_name: admin_org
@@ -47,7 +48,8 @@ robot_config:
 secondary_init_token: 18T36ZULD8KER8TGXSS7JYCK8Y0PAJQZFP69QJJV
 secondary_quay_email: admin@example.com
 secondary_quay_init_config: /home/ocp/misc_artifacts/quay/quay-config-truenas-initial.yaml
+secondary_quay_namespace: quay
 secondary_quay_password: password
 secondary_quay_user: quayadmin
 secondary_server: https://central-quay.apps.ocp4.example.com
-secondary_token: 2UC9CIIH1RJ47GESS4JCUQWTEO0E4R7SLQEA9WE7
+secondary_token: 2KS9ZII7E6YU95D0PQ9XD5TQZSYZOAIN7CSOMUH6

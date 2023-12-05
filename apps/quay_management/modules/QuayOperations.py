@@ -108,14 +108,15 @@ class QuayManagement():
             # Since there can only be a single proxycache definition per org, go through and delete the proxycache first if it exists
             proxy_info = quay_api.get_proxycache(org_name=proxy_data["org_name"])
             if proxy_info is not None:
-                if overwrite:
-                    logging.info(f" existing proxycache found in the organization ----> {proxy_data['org_name']} <----")
-                    logging.info(f" --overwrite-proxycache option found... deleting existing proxycache config for ----> {proxy_info['upstream_registry']} <----")
-                    quay_api.delete_proxycache(org_name=proxy_data["org_name"])
-                else:
-                    logging.warning("Proxy cache already exists and --overwrite-proxycache was not used")
-                    logging.warning("NOT deleting existing proxycache")
-                    break
+                if proxy_info['upstream_registry']:
+                    if overwrite:
+                        logging.info(f" existing proxycache found in the organization ----> {proxy_data['org_name']} <----")
+                        logging.info(f" --overwrite-proxycache option found... deleting existing proxycache config for ----> {proxy_info['upstream_registry']} <----")
+                        quay_api.delete_proxycache(org_name=proxy_data["org_name"])
+                    else:
+                        logging.warning("Proxy cache already exists and --overwrite-proxycache was not used")
+                        logging.warning("NOT deleting existing proxycache")
+                        break
             
             logging.info(f"Creating the proxy cache for ---> {proxy_data['upstream_registry']} <--- in the organization ---> {proxy_data['org_name']} <---")
             quay_api.create_proxycache(org_name=proxy_data["org_name"], json_data=proxy_data)       
@@ -228,7 +229,8 @@ class QuayManagement():
         """
         
         def is_not_member(user, members):
-            for member in members:
+            # expected dict example: {'members': [{'name': 'user1', 'kind': 'user', 'avatar': {'name': 'user1', 'hash': 'xxx', 'color': '#98df8a', 'kind': 'user'}, 'teams': [{'name': 'owners', 'avatar': {'name': 'owners', 'hash': 'xxx', 'color': '#c7c7c7', 'kind': 'team'}}], 'repositories': []}]}
+            for member in members['members']:
                 if member['name'] == user:
                     return False
             return True
@@ -241,21 +243,10 @@ class QuayManagement():
             for user in quay_username:
                 if is_not_member(user, members):
                     logging.info(f"Adding {user} as an owner of --> {org['name']} <--")
-                    quay_server_api.create_org_member(org_name=org['name'], new_member=user, team_name="owners")
+                    response = yaml.load(quay_server_api.create_org_member(org_name=org['name'], new_member=user, team_name="owners").content, Loader=yaml.FullLoader)
+                    logging.debug(f"Error Message from Server: \t\t---> {response['error_message']}")
+                    logging.debug(f"Error Type from Server: \t\t---> {response['error_type']}")
+                    logging.debug(f"Error Status Code from Server: \t---> {response['status']}")
                 else:
                     logging.info(f"{user} is already an owner of {org['name']}")
-            # for member in members['members']:
-            #     for user in quay_username:
-            #         if user == member['name']:
-            #             not_org_owner = True
-            #             for team in member['teams']:
-            #                 # Make sure that if the user is an owner we set the flag to false
-            #                 if team['name'] == "owners":
-            #                     not_org_owner = False
-            #                     break
-            #             if not_org_owner:
-            #                 logging.info(f"Adding {member['name']} as an owner of --> {org['name']} <--")
-            #                 quay_server_api.create_org_member(org_name=org['name'], new_member=member['name'], team_name="owners")
-            #             else:
-            #                 logging.info(f"{member['name']} is already an owner of {org['name']}")
             
