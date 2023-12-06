@@ -209,9 +209,11 @@ class BaseOperations:
                     except: 
                         pass
                     quay_namespace = f"{server_type}_quay_namespace"
+                    quay_init_token = f"{server_type}_init_token"
                     add_these_options = [openshift_options.copy()]
                     add_these_options.append({"quay_admin_org": all_options["quay_admin_org"]})
                     add_these_options.append({quay_namespace: all_options[quay_namespace]})
+                    add_these_options.append({quay_init_token: all_options[quay_init_token]})
                     expected_config_values = build_dict(add_these_options=add_these_options, incoming_dict=expected_config_values)
             except:
                 pass
@@ -478,6 +480,32 @@ print(app_info_dict)
 
             exit(1)
         return data
+
+
+    @classmethod
+    def strip_ldap_from_config(cls, config_file: str) -> str:
+        """
+        Description:
+            Quay will not initialize if LDAP is present in the config. This breaks automations in this
+            program. This function copies the config file to a new location and then removes all of the ldap
+            bits.
+        Args:
+            config_file (str): The full path to the original config file
+        Returns:
+            (str): The full path to the modified Quay config
+        """
+        config_file_dict = cls.load_config(config_file=config_file)
+        keys_to_remove = [key for key in config_file_dict if "ldap" in key.lower()]
+        temporary_quay_init_config_path = "/tmp/quay_init_without_ldap.yaml"
+        for key in keys_to_remove:
+            if "ldap" in key.lower():
+                config_file_dict.pop(key, None)
+        with open(temporary_quay_init_config_path, "w") as file:
+            file.write(yaml.dump(config_file_dict))
+        logging.debug(f"Wrote temporary config to {temporary_quay_init_config_path}")
+        logging.debug(config_file_dict)
+        return temporary_quay_init_config_path
+        
 
     @staticmethod
     def replace_infraID(path_to_original_file: str, new_infra_id: str) -> str:

@@ -66,10 +66,12 @@ if __name__ == "__main__":
             quay_server = "secondary_server"
             quay_token = "secondary_token"
             quay_user = "secondary_quay_user"
+            quay_secret_config = "seconday_quay_init_config"
         else:
             quay_server = "primary_server"
             quay_token = "primary_token"
             quay_user = "primary_quay_user"
+            quay_secret_config = "primary_quay_init_config"
         
         # These options don't need Quay Information
         dont_need_quay = ["initialize_oauth", "setup_quay_openshift", "add_super_user"]
@@ -101,7 +103,6 @@ if __name__ == "__main__":
     if args.add_super_user or args.setup_quay_openshift or args.initialize_oauth or args.take_ownership_all_super_users:
         quay_namespace = quay_config.primary_quay_namespace
         if args.configure_secondary_quay_server:
-            quay_init_config = quay_config.secondary_quay_init_config
             quay_namespace = quay_config.secondary_quay_namespace
 
     # The order might matter. We need to make sure quay is setup first, if that option is passed in
@@ -109,7 +110,8 @@ if __name__ == "__main__":
     # If neither of these options are passed in, we assume that we have a valid username and token
     # as well as the appropriate permissions to make modifications to Quay (i.e. we are a super user)
     if args.setup_quay_openshift:
-        quay_init_config = quay_config.primary_quay_init_config
+        quay_init_config = eval("quay_config.%s" % quay_secret_config)
+        quay_config.primary_quay_init_config
         OpenShiftCommands.openshift_login(api_url=quay_config.openshift_api_url, username=quay_config.openshift_username, passwd=quay_config.openshift_password)
         openshift_logged_in = True
         yaml_list = BaseOperations.yaml_file_list(quay_config.openshift_yaml_dir)
@@ -124,6 +126,12 @@ if __name__ == "__main__":
                 pass
             if which_yaml_file['kind'] == "Subscription":
                 if which_yaml_file['metadata']['name'] == "quay-operator":
+                    # We need to strip out LDAP in order to initialize the user
+                    ldap_in_config = any("ldap" in key.lower() for key in BaseOperations.load_config(config_file=quay_init_config))
+                    if ldap_in_config:
+                        quay_init_config_origin = quay_init_config
+                        # This config file has the LDAP bits removed as it is a copy of the original config
+                        quay_init_config = BaseOperations.strip_ldap_from_config(quay_init_config)
                     OpenShiftCommands.openshift_create_secret(namespace=quay_namespace, file_path=quay_init_config)
                     OpenShiftCommands.openshift_apply_file(yaml_file)
                     logging.debug("----> Waiting for the Quay Registry to be created...")
@@ -210,6 +218,27 @@ if __name__ == "__main__":
         # reread the config file
         quay_config = BaseOperations(args.config_file, args=args)
         init_config_token_name = eval("quay_config.%s" % token_name)
+        if args.setup_quay_openshift:
+            # The thought is that if we are setting up Quay on Openshift at the same time as we initialize the user
+            # We have removed the LDAP info in order to initialize the user (can't initialize a user if LDAP is present)
+            # now that the initialization has completed, add the LDAP information back in
+            quay_init_config = eval("quay_config.%s" % quay_secret_config)
+            ldap_in_config = any("ldap" in key.lower() for key in BaseOperations.load_config(config_file=quay_init_config))
+            if ldap_in_config:
+                # dig out the secret name from the quay registry object incase the cluster was installed values other than defaults
+                quay_registry_object = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": quay_namespace,  
+                                                                                "object_type": "quayregistry"}), Loader=yaml.FullLoader)
+                registry_object_secret = quay_registry_object['items'][0]['spec']['configBundleSecret']
+                # Regenerate the original secret with LDAP information
+                OpenShiftCommands.openshift_replace_quay_init_secret(full_path_to_file=quay_init_config, secret_name=registry_object_secret, namespace=quay_namespace)
+                # Roll the pods automatically so that the ldap stuff gets picked up again
+                quay_deployment = yaml.load(OpenShiftCommands.openshift_get_object(namespace=quay_namespace, object_type="deployment", label="quay-component=quay"), Loader=yaml.FullLoader)
+                number_of_replicas = quay_deployment['items'][0]['spec']['replicas']
+                OpenShiftCommands.openshift_delete_object(object_type="pods", namespace=quay_namespace, label="quay-component=quay-app")
+                time.sleep(10)
+                OpenShiftCommands.openshift_waitfor_pods(namespace=quay_namespace, iterations=10, delay_between_checks=90, number_of_pods=number_of_replicas)
+                # just becasue the pods are ready doesn't mean they are warmed up
+                time.sleep(90)
 
     if args.add_super_user:
         # If we haven't logged into OpenShift yet, do so now
@@ -235,21 +264,41 @@ if __name__ == "__main__":
         logging.info(f"Replacing the secret {registry_object_secret}")
         output = OpenShiftCommands.openshift_replace_quay_init_secret(full_path_to_file="/tmp/quay_init_bundle.yaml", secret_name=registry_object_secret)
     
-    if args.add_admin_org:
-        if args.initialize_user:
-            quay_api_token = init_config_token_name
+    def create_admin_org(quay_api_token):
+        """
+        Description:
+            Local function that creates an admin org. This may be needed in both
+            initialize_oauth and add_admin_org.
+        Args:
+            quay_api_token (_type_): Quay api token
+        """
+        time.sleep(10)
         quay_server_api = QuayAPI(base_url=quay_url, api_token=quay_api_token)
         logging.info(f"Attempting to create {quay_config.quay_admin_org}")
         quay_server_api.create_org(org_name=quay_config.quay_admin_org)
-        response = quay_server_api.create_oauth_application(org_name=quay_config.quay_admin_org)
+        response = quay_server_api.create_oauth_application(org_name=quay_config.quay_admin_org, application_name="oauth-automation")
         logging.debug(response)
         print()
+    
+    
+    if args.add_admin_org:
+        if args.initialize_user:
+            quay_api_token = init_config_token_name
+        create_admin_org(quay_api_token=quay_api_token)
+        
+        
     if args.initialize_oauth:
         # If we haven't logged into OpenShift yet, do so now
         if not openshift_logged_in:
             logging.debug(f"Attempting to login into {quay_config.openshift_api_url} as {quay_config.openshift_username}")
             OpenShiftCommands.openshift_login(api_url=quay_config.openshift_api_url, username=quay_config.openshift_username, passwd=quay_config.openshift_password)
             openshift_logged_in = True
+        token = quay_config.primary_init_token
+        if args.configure_secondary_quay_server:
+            token = quay_config.secondary_init_token
+        # We want to ensure an admin org exists so we can tie an oauth application to it
+        create_admin_org(quay_api_token=token)
+        
         pod_response = yaml.load(OpenShiftCommands.openshift_get_object(**{"namespace": quay_namespace, 
                                                                         "label": "quay-component=quay-app", 
                                                                         "object_type": "pods"}), Loader=yaml.FullLoader)
@@ -310,10 +359,11 @@ if __name__ == "__main__":
         for key in oauthapplication_select_output:
             if oauthapplication_select_output[key]['oauth_name'] == "automation":
                 logging.debug("Found the 'automation' OAUTH application")
-                logging.debug("This is being used to type the OAUTH key to")
+                logging.debug("This is being used to tie the OAUTH key to")
                 logging.debug(oauthapplication_select_output[key])
                 oauth_app_database_id = key
                 oauth_app_org_id = oauthapplication_select_output[key]['org_id']
+
 
         for key in oauthaccesstoken_select_output:
             if oauthaccesstoken_select_output[key]['app_id'] == oauth_app_database_id:

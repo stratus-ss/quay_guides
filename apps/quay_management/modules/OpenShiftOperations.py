@@ -79,6 +79,24 @@ class OpenShiftCommands:
             logging.error(f"The secret {secret_name} already exists!")
 
     @staticmethod
+    def openshift_delete_object(object_type: str = "pods", namespace: str = "quay", label: str = "quay-component=quay-app") -> None:
+        """
+        Description:
+            Used to delete objects in OpenShift
+        Args:
+            object_type (str, optional): The type of object to be deleted. Defaults to "pods".
+            namespace (str, optional): The namespace where an object resides. Defaults to "quay".
+            label (str, optional): The label to match. Defaults to "quay-component=quay-app".
+        """
+        delete_command = ["oc", "delete", object_type]
+        if namespace != None:
+            delete_command.extend(["-n", namespace])
+        if label != None:
+            delete_command.extend(["-l", label])
+        logging.debug(f"Running the following delete command: {delete_command}")
+        subprocess.check_output(delete_command)
+
+    @staticmethod
     def openshift_get_infrastructure_name(command_output):
         """
         Returns the current infrastructure ID of an OpenShift Cluster
