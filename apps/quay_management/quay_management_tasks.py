@@ -104,6 +104,8 @@ if __name__ == "__main__":
         quay_namespace = quay_config.primary_quay_namespace
         if args.configure_secondary_quay_server:
             quay_namespace = quay_config.secondary_quay_namespace
+        if args.initialize_oauth:
+            quay_url = eval("quay_config.%s" % quay_server)
 
     # The order might matter. We need to make sure quay is setup first, if that option is passed in
     # After quay is setup, if we are initializing a user that has to happen next
