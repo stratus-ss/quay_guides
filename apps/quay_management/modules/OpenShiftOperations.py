@@ -79,7 +79,7 @@ class OpenShiftCommands:
             logging.error(f"The secret {secret_name} already exists!")
 
     @staticmethod
-    def openshift_delete_object(object_type: str = "pods", namespace: str = "quay", label: str = "quay-component=quay-app") -> None:
+    def openshift_delete_object(object_type: str = "pods", namespace: str = "quay", label: str = "quay-component=quay-app", grace_period: int = None) -> None:
         """
         Description:
             Used to delete objects in OpenShift
@@ -87,12 +87,15 @@ class OpenShiftCommands:
             object_type (str, optional): The type of object to be deleted. Defaults to "pods".
             namespace (str, optional): The namespace where an object resides. Defaults to "quay".
             label (str, optional): The label to match. Defaults to "quay-component=quay-app".
+            grace_period (int): If you want to make sure the pods die more quickly you can set grace_period=0
         """
         delete_command = ["oc", "delete", object_type]
         if namespace != None:
             delete_command.extend(["-n", namespace])
         if label != None:
             delete_command.extend(["-l", label])
+        if grace_period != None:
+            delete_command.extend(["--grace-period", grace_period])
         logging.debug(f"Running the following delete command: {delete_command}")
         subprocess.check_output(delete_command)
 

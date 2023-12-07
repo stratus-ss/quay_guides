@@ -231,11 +231,13 @@ if __name__ == "__main__":
                 registry_object_secret = quay_registry_object['items'][0]['spec']['configBundleSecret']
                 # Regenerate the original secret with LDAP information
                 OpenShiftCommands.openshift_replace_quay_init_secret(full_path_to_file=quay_init_config, secret_name=registry_object_secret, namespace=quay_namespace)
+                logging.info("Pausing to let the secret rotate fully")
+                time.sleep(15)
                 # Roll the pods automatically so that the ldap stuff gets picked up again
                 quay_deployment = yaml.load(OpenShiftCommands.openshift_get_object(namespace=quay_namespace, object_type="deployment", label="quay-component=quay"), Loader=yaml.FullLoader)
                 number_of_replicas = quay_deployment['items'][0]['spec']['replicas']
-                OpenShiftCommands.openshift_delete_object(object_type="pods", namespace=quay_namespace, label="quay-component=quay-app")
-                time.sleep(10)
+                OpenShiftCommands.openshift_delete_object(object_type="pods", namespace=quay_namespace, label="quay-component=quay-app", grace_period=0)
+                time.sleep(60)
                 OpenShiftCommands.openshift_waitfor_pods(namespace=quay_namespace, iterations=10, delay_between_checks=90, number_of_pods=number_of_replicas)
                 # just becasue the pods are ready doesn't mean they are warmed up
                 time.sleep(90)
