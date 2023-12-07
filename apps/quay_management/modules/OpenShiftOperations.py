@@ -79,7 +79,7 @@ class OpenShiftCommands:
             logging.error(f"The secret {secret_name} already exists!")
 
     @staticmethod
-    def openshift_delete_object(object_type: str = "pods", namespace: str = "quay", label: str = "quay-component=quay-app", grace_period: int = None) -> None:
+    def openshift_delete_object(object_type: str = "pods", namespace: str = "quay", label: str = "quay-component=quay-app", grace_period: str = None) -> None:
         """
         Description:
             Used to delete objects in OpenShift

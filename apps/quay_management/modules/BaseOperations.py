@@ -210,8 +210,11 @@ class BaseOperations:
                         pass
                     quay_namespace = f"{server_type}_quay_namespace"
                     quay_init_token = f"{server_type}_init_token"
+                    quay_url = f"{server_type}_server"
                     add_these_options = [openshift_options.copy()]
+                    add_these_options.append({quay_url, all_options[quay_url]})
                     add_these_options.append({"quay_admin_org": all_options["quay_admin_org"]})
+                    
                     add_these_options.append({quay_namespace: all_options[quay_namespace]})
                     add_these_options.append({quay_init_token: all_options[quay_init_token]})
                     expected_config_values = build_dict(add_these_options=add_these_options, incoming_dict=expected_config_values)

@@ -236,7 +236,7 @@ if __name__ == "__main__":
                 # Roll the pods automatically so that the ldap stuff gets picked up again
                 quay_deployment = yaml.load(OpenShiftCommands.openshift_get_object(namespace=quay_namespace, object_type="deployment", label="quay-component=quay"), Loader=yaml.FullLoader)
                 number_of_replicas = quay_deployment['items'][0]['spec']['replicas']
-                OpenShiftCommands.openshift_delete_object(object_type="pods", namespace=quay_namespace, label="quay-component=quay-app", grace_period=0)
+                OpenShiftCommands.openshift_delete_object(object_type="pods", namespace=quay_namespace, label="quay-component=quay-app", grace_period="0")
                 time.sleep(60)
                 OpenShiftCommands.openshift_waitfor_pods(namespace=quay_namespace, iterations=10, delay_between_checks=90, number_of_pods=number_of_replicas)
                 # just becasue the pods are ready doesn't mean they are warmed up
