@@ -499,10 +499,10 @@ print(app_info_dict)
         """
         config_file_dict = cls.load_config(config_file=config_file)
         keys_to_remove = [key for key in config_file_dict if "ldap" in key.lower()]
+        keys_to_remove.append("AUTHENTICATION_TYPE")
         temporary_quay_init_config_path = "/tmp/quay_init_without_ldap.yaml"
         for key in keys_to_remove:
-            if "ldap" in key.lower():
-                config_file_dict.pop(key, None)
+            config_file_dict.pop(key, None)
         with open(temporary_quay_init_config_path, "w") as file:
             file.write(yaml.dump(config_file_dict))
         logging.debug(f"Wrote temporary config to {temporary_quay_init_config_path}")

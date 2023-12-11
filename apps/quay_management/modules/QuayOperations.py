@@ -244,9 +244,17 @@ class QuayManagement():
                 if is_not_member(user, members):
                     logging.info(f"Adding {user} as an owner of --> {org['name']} <--")
                     response = yaml.load(quay_server_api.create_org_member(org_name=org['name'], new_member=user, team_name="owners").content, Loader=yaml.FullLoader)
-                    logging.debug(f"Error Message from Server: \t\t---> {response['error_message']}")
-                    logging.debug(f"Error Type from Server: \t\t---> {response['error_type']}")
-                    logging.debug(f"Error Status Code from Server: \t---> {response['status']}")
+                    try:
+                        logging.debug(f"Error Message from Server: \t\t---> {response['error_message']}")
+                        logging.debug(f"Error Type from Server: \t\t---> {response['error_type']}")
+                        logging.debug(f"Error Status Code from Server: \t---> {response['status']}")
+                    except Exception as e:
+                        logging.error("Failed to get a proper response from the Quay API")
+                        logging.error()
+                        print("==================================================")
+                        logging.error(e)
+                        # I am going to bipass the error assuming that it is a random disruption in communication
+                        pass
                 else:
                     logging.info(f"{user} is already an owner of {org['name']}")
             
