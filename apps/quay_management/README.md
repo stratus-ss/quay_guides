@@ -21,6 +21,10 @@ Almost all the options that have 'values' are referenced from the application co
 
 ## Quay Management Tasks
 
+You can find a sample of the program config file [here](https://github.com/stratus-ss/quay_guides/blob/main/apps/quay_management/config/sample_config.yaml)
+
+You can find a sample Quay config [here](https://github.com/stratus-ss/quay_guides/blob/main/apps/quay_management/config/quay_init.ini)
+
 Currently this program supports the following functionality:
 
 * Install Quay on OpenShift via loading mostly preconfigured YAML files. (Some things like the machineconfig can be templated somewhat... See [machineconfig sample](https://github.com/stratus-ss/quay_guides/blob/main/apps/quay_management/config/samples/odf_quay_manifests/0001-ODF_machineset.yaml))
