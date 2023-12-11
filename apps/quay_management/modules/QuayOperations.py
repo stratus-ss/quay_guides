@@ -250,7 +250,7 @@ class QuayManagement():
                         logging.debug(f"Error Status Code from Server: \t---> {response['status']}")
                     except Exception as e:
                         logging.error("Failed to get a proper response from the Quay API")
-                        logging.error()
+                        print()
                         print("==================================================")
                         logging.error(e)
                         # I am going to bipass the error assuming that it is a random disruption in communication
