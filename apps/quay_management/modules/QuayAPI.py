@@ -15,17 +15,19 @@ class QuayAPI:
         """
         self.api_token = api_token
         self.base_url = base_url
-        self.repo_endpoint= self.base_url + "/api/v1/find/repositories"
+        self.repo_endpoint = f"{self.base_url}/api/v1/find/repositories"
         self.org_endpoint = "/api/v1/organization/"
         self.org_member_list_endpoint = f"{self.org_endpoint}/<org>/members"
         self.org_list_endpoint = "/api/v1/superuser/organizations/"
         self.org_member_add_endpoint = "/api/v1/organization/<org>/team/<team_name>/members/<new_member>"
         # The <org> is a placeholder so that it can be replaced as needed
-        self.proxycache_url = self.base_url + "/api/v1/organization/<org>/proxycache"
-        self.initialize_url = self.base_url + "/api/v1/user/initialize"
+        self.proxycache_url = f"{self.base_url}/api/v1/organization/<org>/proxycache"
+        self.initialize_url = f"{self.base_url}/api/v1/user/initialize"
         self.headers = {'Authorization': f'Bearer {self.api_token}'}
         self.admin_application_name = "quaysync"
-        self.oauth_application_url = self.base_url + "/api/v1/organization/<org>/applications"
+        self.oauth_application_url = (
+            f"{self.base_url}/api/v1/organization/<org>/applications"
+        )
         if isinstance(robot_acct, dict):     
                 try:
                     if robot_acct["type"] == "org":
@@ -269,6 +271,17 @@ class QuayAPI:
             logging.warning(f'Status code: {proxy_delete_response.status_code}')
 
     def get_oauth_client_id(self, admin_org_name: str = None, override_headers: bool = False, additional_api_key: str = None) -> str:
+        """
+        Description:
+            Get the OAuth client ID for the specified admin organization.
+        Args:
+            admin_org_name (str, optional): The name of the admin organization.
+            override_headers (bool, optional):  Whether to override the headers. Defaults to False.
+            additional_api_key (str, optional): An additional API key. Defaults to None.
+
+        Returns:
+            str: The OAuth client ID
+        """
         client_id_endpoint = self.base_url + self.org_endpoint + admin_org_name + "/applications"
         current_applications = self.get_data(client_id_endpoint, override_headers=override_headers, additional_api_key=additional_api_key)
         if current_applications is None:
@@ -352,8 +365,7 @@ class QuayAPI:
         else:
             headers = self.headers
         url = f'{self.base_url}{self.org_list_endpoint}'
-        response = self.get_data(url=url)
-        return(response)
+        return self.get_data(url=url)
     
     def get_org_members(self, org_name: str = None) -> dict:
         """
@@ -366,8 +378,7 @@ class QuayAPI:
         """
         url = f'{self.base_url}{self.org_member_list_endpoint}'
         url = self.assemble_org_url(org_name=org_name, url_to_replace=url)
-        response = self.get_data(url=url)
-        return(response)
+        return self.get_data(url=url)
         
         
     def get_proxycache(self, org_name: str = None) -> dict:
