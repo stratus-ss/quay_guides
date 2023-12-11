@@ -35,7 +35,7 @@ Currently this program supports the following functionality:
 * Can add robot accounts to the speficied organizations
 * Can add Proxycaches to the specified organizations
 * Can ensure that specified orgs either exist or are removed
-* Can ensure that the specified `uay_username` takes ownership of all organizations. This is required for certain automations such as push/pull to repos in an org
+* Can ensure that the specified `quay_username` takes ownership of all organizations. This is required for certain automations such as push/pull to repos in an org
 * Can ensure that all users specified in the Quay OpenShift secret take ownership of all organizations
 * You can specify if you are configuring a secondary server
 
