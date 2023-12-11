@@ -51,14 +51,10 @@ class ImageMover(BaseOperations):
         Returns:
             None
         """
-        if image_source:
-            if "//" in image_source:
-                # If there is http:// or https:// we need to strip that because this is illegal for images
-                image_source = image_source.split("//")[1:][0]
-        if image_destination:
-            if "//" in image_destination:
-                # If there is http:// or https:// we need to strip that because this is illegal for images
-                image_destination = image_destination.split("//")[1:][0]
+        if image_source and "//" in image_source:
+            image_source = image_source.split("//")[1:][0]
+        if image_destination and "//" in image_destination:
+            image_destination = image_destination.split("//")[1:][0]
             
         if operation == "tag":
             podman_command = ["podman", operation, image_source, image_destination]
@@ -97,7 +93,7 @@ class QuayManagement():
  
     def add_proxycache(self, quay_api: QuayAPI, overwrite: bool = False):
         """
-        Descirption:
+        Description:
             Add a proxy cache to the quay configuration.
         Args:
             source_quay_api: The Quay API object to use.
@@ -107,16 +103,15 @@ class QuayManagement():
             proxy_data = self.quay_config.proxycache[key]
             # Since there can only be a single proxycache definition per org, go through and delete the proxycache first if it exists
             proxy_info = quay_api.get_proxycache(org_name=proxy_data["org_name"])
-            if proxy_info is not None:
-                if proxy_info['upstream_registry']:
-                    if overwrite:
-                        logging.info(f" existing proxycache found in the organization ----> {proxy_data['org_name']} <----")
-                        logging.info(f" --overwrite-proxycache option found... deleting existing proxycache config for ----> {proxy_info['upstream_registry']} <----")
-                        quay_api.delete_proxycache(org_name=proxy_data["org_name"])
-                    else:
-                        logging.warning("Proxy cache already exists and --overwrite-proxycache was not used")
-                        logging.warning("NOT deleting existing proxycache")
-                        break
+            if proxy_info is not None and proxy_info['upstream_registry']:
+                if overwrite:
+                    logging.info(f" existing proxycache found in the organization ----> {proxy_data['org_name']} <----")
+                    logging.info(f" --overwrite-proxycache option found... deleting existing proxycache config for ----> {proxy_info['upstream_registry']} <----")
+                    quay_api.delete_proxycache(org_name=proxy_data["org_name"])
+                else:
+                    logging.warning("Proxy cache already exists and --overwrite-proxycache was not used")
+                    logging.warning("NOT deleting existing proxycache")
+                    break
             
             logging.info(f"Creating the proxy cache for ---> {proxy_data['upstream_registry']} <--- in the organization ---> {proxy_data['org_name']} <---")
             quay_api.create_proxycache(org_name=proxy_data["org_name"], json_data=proxy_data)       
@@ -138,9 +133,8 @@ class QuayManagement():
                 robot_name = f"{robot_api.robot_acct['org_name']}+{robot_api.robot_acct['name']}"
             if robot_exists[robot_name]:
                 logging.info(f"The robot account {robot_name} already exists")
-            else:
-                if username:
-                    robot_api.create_robot_acct()
+            elif username:
+                robot_api.create_robot_acct()
           
     def delete_robot(self):
         """
@@ -163,8 +157,7 @@ class QuayManagement():
         existing_robot_dict = {}
         for key in self.quay_config.robot_config:
             robot_api = self.parse_robot_acct_info(key)
-            robot_exists = robot_api.get_robot_acct()
-            if robot_exists:
+            if robot_exists := robot_api.get_robot_acct():
                 # The quay api creates a robot account with <org>+<name> so to store the name correctly, we need to use the object returned from the API
                 existing_robot_dict[(robot_exists['name'])] = True
             else:
@@ -212,6 +205,7 @@ class QuayManagement():
                 if user in quay_init_secret_decoded[quay_secret_section]:
                     logging.info(f"User {user} was already in the Quay SUPER_USERS secret... skipping")
                 else:
+                    logging.info(f"ADDED ---> {user} <--- to the Quay SUPER_USERS secret")
                     quay_init_secret_decoded[quay_secret_section].append(user)
             return(quay_init_secret_decoded)
      
@@ -249,12 +243,10 @@ class QuayManagement():
                         logging.debug(f"Error Type from Server: \t\t---> {response['error_type']}")
                         logging.debug(f"Error Status Code from Server: \t---> {response['status']}")
                     except Exception as e:
-                        logging.error("Failed to get a proper response from the Quay API")
+                        logging.error("Failed to get a proper response from the Quay API when trying to process ---> {user} <---")
                         print()
                         print("==================================================")
                         logging.error(e)
-                        # I am going to bipass the error assuming that it is a random disruption in communication
-                        pass
                 else:
                     logging.info(f"{user} is already an owner of {org['name']}")
             
